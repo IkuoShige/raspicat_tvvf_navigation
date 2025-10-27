@@ -11,7 +11,9 @@ WaypointFollowerNode::WaypointFollowerNode()
 : Node("waypoint_follower_node"),
   current_state_(NavigationState::IDLE),
   paused_(false),
-  wait_duration_(0.0)
+  wait_duration_(0.0),
+  wait_reason_(WaitReason::NONE),
+  wait_topic_received_(false)
 {
   // Declare parameters
   this->declare_parameter("waypoint_csv_path", "");
@@ -83,6 +85,7 @@ WaypointFollowerNode::WaypointFollowerNode()
 
   RCLCPP_INFO(this->get_logger(), "Waypoint Follower Node initialized");
   RCLCPP_INFO(this->get_logger(), "CSV path: %s", waypoint_csv_path_.c_str());
+  RCLCPP_INFO(this->get_logger(), "auto_start parameter: %s", auto_start_ ? "true" : "false");
 
   // Auto-start navigation if enabled
   if (auto_start_) {
@@ -90,6 +93,8 @@ WaypointFollowerNode::WaypointFollowerNode()
     waypoint_manager_->reset();
     paused_ = false;
     transitionToState(NavigationState::LOADING_WAYPOINTS);
+  } else {
+    RCLCPP_INFO(this->get_logger(), "Auto-start disabled. Call /start_waypoint_navigation service to begin.");
   }
 }
 
@@ -250,15 +255,24 @@ void WaypointFollowerNode::handleWaypointReachedState()
     return;
   }
 
-  waypoint_manager_->markCurrentReached();
+  RCLCPP_INFO(this->get_logger(), "Reached waypoint %d", current_wp->id);
 
-  // Execute command
+  // Execute command if present
   if (!current_wp->command.empty()) {
+    // Do NOT mark as reached here - it will be marked when command completes
     executeWaypointCommand(current_wp->command);
   } else {
-    // No command, proceed to next waypoint
+    // No command, mark as reached and proceed to next waypoint
+    waypoint_manager_->markCurrentReached();
+
     if (waypoint_manager_->isCompleted()) {
-      transitionToState(NavigationState::COMPLETED);
+      if (loop_navigation_) {
+        RCLCPP_INFO(this->get_logger(), "All waypoints completed, looping back to start");
+        waypoint_manager_->reset();
+        transitionToState(NavigationState::NAVIGATING);
+      } else {
+        transitionToState(NavigationState::COMPLETED);
+      }
     } else {
       transitionToState(NavigationState::NAVIGATING);
     }
@@ -267,11 +281,50 @@ void WaypointFollowerNode::handleWaypointReachedState()
 
 void WaypointFollowerNode::handleWaitingState()
 {
-  if ((this->now() - wait_start_time_).seconds() >= wait_duration_) {
-    RCLCPP_INFO(this->get_logger(), "Wait complete");
+  bool wait_complete = false;
+
+  switch (wait_reason_) {
+    case WaitReason::TIME:
+      // Time-based wait (wait:N)
+      if ((this->now() - wait_start_time_).seconds() >= wait_duration_) {
+        RCLCPP_INFO(this->get_logger(), "Time-based wait complete");
+        wait_complete = true;
+      }
+      break;
+
+    case WaitReason::TOPIC:
+      // Topic-based wait (wait_topic:/topic_name)
+      if (wait_topic_received_) {
+        RCLCPP_INFO(this->get_logger(), "Topic-based wait complete");
+        wait_complete = true;
+      }
+      break;
+
+    case WaitReason::PAUSE:
+      // Manual pause (pause command) - wait for resume service
+      // paused_ flag is checked, no automatic completion
+      break;
+
+    case WaitReason::NONE:
+      // Should not be in WAITING state with NONE reason
+      RCLCPP_WARN(this->get_logger(), "In WAITING state but wait_reason is NONE");
+      wait_complete = true;
+      break;
+  }
+
+  // If wait is complete, proceed to next waypoint
+  if (wait_complete) {
+    wait_reason_ = WaitReason::NONE;
+    waypoint_manager_->markCurrentReached();
 
     if (waypoint_manager_->isCompleted()) {
-      transitionToState(NavigationState::COMPLETED);
+      if (loop_navigation_) {
+        RCLCPP_INFO(this->get_logger(), "All waypoints completed, looping back to start");
+        waypoint_manager_->reset();
+        transitionToState(NavigationState::NAVIGATING);
+      } else {
+        transitionToState(NavigationState::COMPLETED);
+      }
     } else {
       transitionToState(NavigationState::NAVIGATING);
     }
@@ -309,19 +362,41 @@ void WaypointFollowerNode::executeWaypointCommand(const std::string& command)
       transitionToState(NavigationState::NAVIGATING);
     }
   }
-  else if (command == "stop") {
-    RCLCPP_INFO(this->get_logger(), "Stop command - pausing navigation");
+  else if (command == "pause" || command == "stop") {
+    RCLCPP_INFO(this->get_logger(), "Pause command - waiting for manual resume");
+    wait_reason_ = WaitReason::PAUSE;
     paused_ = true;
+    transitionToState(NavigationState::WAITING);
   }
   else if (command.substr(0, 5) == "wait:") {
     double wait_seconds;
     if (parseWaitCommand(command, wait_seconds)) {
       RCLCPP_INFO(this->get_logger(), "Waiting for %.1f seconds", wait_seconds);
+      wait_reason_ = WaitReason::TIME;
       wait_start_time_ = this->now();
       wait_duration_ = wait_seconds;
       transitionToState(NavigationState::WAITING);
     } else {
       RCLCPP_WARN(this->get_logger(), "Invalid wait command format: %s", command.c_str());
+      transitionToState(NavigationState::NAVIGATING);
+    }
+  }
+  else if (command.substr(0, 11) == "wait_topic:") {
+    std::string topic_name;
+    if (parseWaitTopicCommand(command, topic_name)) {
+      RCLCPP_INFO(this->get_logger(), "Waiting for topic: %s", topic_name.c_str());
+      wait_reason_ = WaitReason::TOPIC;
+      wait_topic_name_ = topic_name;
+      wait_topic_received_ = false;
+
+      // Create subscriber for the wait topic
+      wait_topic_sub_ = this->create_subscription<std_msgs::msg::Bool>(
+        topic_name, 10,
+        std::bind(&WaypointFollowerNode::waitTopicCallback, this, std::placeholders::_1));
+
+      transitionToState(NavigationState::WAITING);
+    } else {
+      RCLCPP_WARN(this->get_logger(), "Invalid wait_topic command format: %s", command.c_str());
       transitionToState(NavigationState::NAVIGATING);
     }
   }
@@ -357,6 +432,33 @@ bool WaypointFollowerNode::parseWaitCommand(const std::string& command, double& 
     return wait_seconds >= 0.0;
   } catch (...) {
     return false;
+  }
+}
+
+bool WaypointFollowerNode::parseWaitTopicCommand(const std::string& command, std::string& topic_name)
+{
+  try {
+    // Format: "wait_topic:/topic_name"
+    size_t colon_pos = command.find(':');
+    if (colon_pos == std::string::npos || colon_pos >= command.length() - 1) {
+      return false;
+    }
+
+    topic_name = command.substr(colon_pos + 1);
+    // Topic name should not be empty and should start with /
+    return !topic_name.empty();
+  } catch (...) {
+    return false;
+  }
+}
+
+void WaypointFollowerNode::waitTopicCallback(const std_msgs::msg::Bool::SharedPtr msg)
+{
+  if (wait_reason_ == WaitReason::TOPIC && msg->data) {
+    RCLCPP_INFO(this->get_logger(), "Received true from topic %s", wait_topic_name_.c_str());
+    wait_topic_received_ = true;
+    // Unsubscribe to avoid accumulating subscriptions
+    wait_topic_sub_.reset();
   }
 }
 
@@ -529,28 +631,69 @@ void WaypointFollowerNode::resumeNavigationCallback(
   std::shared_ptr<std_srvs::srv::Trigger::Response> response)
 {
   paused_ = false;
-  response->success = true;
-  response->message = "Navigation resumed";
+
+  // If in WAITING state with PAUSE reason, transition to next waypoint
+  if (current_state_ == NavigationState::WAITING && wait_reason_ == WaitReason::PAUSE) {
+    wait_reason_ = WaitReason::NONE;
+    waypoint_manager_->markCurrentReached();
+
+    if (waypoint_manager_->isCompleted()) {
+      if (loop_navigation_) {
+        RCLCPP_INFO(this->get_logger(), "All waypoints completed, looping back to start");
+        waypoint_manager_->reset();
+        transitionToState(NavigationState::NAVIGATING);
+      } else {
+        transitionToState(NavigationState::COMPLETED);
+      }
+    } else {
+      transitionToState(NavigationState::NAVIGATING);
+    }
+
+    response->success = true;
+    response->message = "Resumed from pause command";
+  } else {
+    response->success = true;
+    response->message = "Navigation resumed";
+  }
 }
 
 void WaypointFollowerNode::skipWaypointCallback(
   const std::shared_ptr<std_srvs::srv::Trigger::Request> /*request*/,
   std::shared_ptr<std_srvs::srv::Trigger::Response> response)
 {
-  if (current_state_ == NavigationState::NAVIGATING) {
+  if (current_state_ == NavigationState::NAVIGATING || current_state_ == NavigationState::WAITING) {
     auto current_wp = waypoint_manager_->getCurrentWaypoint();
     if (current_wp.has_value()) {
+      // Clean up any wait-related state
+      if (current_state_ == NavigationState::WAITING) {
+        wait_reason_ = WaitReason::NONE;
+        if (wait_topic_sub_) {
+          wait_topic_sub_.reset();
+        }
+      }
+
       waypoint_manager_->skipCurrentWaypoint();
       response->success = true;
       response->message = "Skipped waypoint " + std::to_string(current_wp->id);
-      transitionToState(NavigationState::NAVIGATING);
+
+      if (waypoint_manager_->isCompleted()) {
+        if (loop_navigation_) {
+          RCLCPP_INFO(this->get_logger(), "All waypoints completed, looping back to start");
+          waypoint_manager_->reset();
+          transitionToState(NavigationState::NAVIGATING);
+        } else {
+          transitionToState(NavigationState::COMPLETED);
+        }
+      } else {
+        transitionToState(NavigationState::NAVIGATING);
+      }
     } else {
       response->success = false;
       response->message = "No current waypoint to skip";
     }
   } else {
     response->success = false;
-    response->message = "Not in navigating state";
+    response->message = "Not in navigating or waiting state";
   }
 }
 

@@ -4,13 +4,31 @@ TVVF (Time-Varying Vector Field) based navigation and waypoint following system 
 
 ## Quick start: sim
 
+**Option 1: Auto-start (recommended)**
 ```bash
+# Terminal 1: Launch Gazebo
 ros2 launch raspicat_gazebo raspicat_gazebo_livox.launch.py
-# If auto_start:=true, you do not need to service call /start_waypoint_navigation
-ros2 launch raspicat_tvvf_navigation waypoint_navigation.launch.py use_sim_time:=true auto_start:=true
+
+# Terminal 2: Launch navigation with auto-start
+ros2 launch raspicat_tvvf_navigation waypoint_navigation.launch.py \
+  use_sim_time:=true \
+  auto_start:=true
+
+# Terminal 3: Enable motor (wait for Gazebo to be fully loaded)
 ros2 service call /motor_power std_srvs/SetBool '{data: true}'
-# if you launch raspicat_tvvf_navigation without auto_start:=true
-# ros2 service call /start_waypoint_navigation std_srvs/srv/Trigger 
+```
+
+**Option 2: Manual start**
+```bash
+# Terminal 1: Launch Gazebo
+ros2 launch raspicat_gazebo raspicat_gazebo_livox.launch.py
+
+# Terminal 2: Launch navigation (auto_start is false by default)
+ros2 launch raspicat_tvvf_navigation waypoint_navigation.launch.py use_sim_time:=true
+
+# Terminal 3: Enable motor and start navigation manually
+ros2 service call /motor_power std_srvs/SetBool '{data: true}'
+ros2 service call /start_waypoint_navigation std_srvs/srv/Trigger
 ```
 
 ## Overview
@@ -60,10 +78,31 @@ ros2 launch raspicat_tvvf_navigation waypoint_navigation.launch.py use_sim_time:
 - `use_sim_time`: Use simulation time (default: false)
   - `true` for Gazebo simulation
   - `false` for real robot
+  - Example: `use_sim_time:=true`
+
 - `map_file`: Path to map YAML file (default: maps/maps.yaml)
+  - Absolute path to custom map file
+  - Example: `map_file:=/path/to/your/map.yaml`
+
 - `waypoint_csv`: Path to waypoint CSV file (default: maps/maps.csv)
+  - Absolute path to custom waypoint file
+  - Example: `waypoint_csv:=/path/to/your/waypoints.csv`
+
 - `auto_start`: Automatically start waypoint navigation (default: false)
+  - `true`: Start navigation immediately after launch
+  - `false`: Wait for `/start_waypoint_navigation` service call
+  - Example: `auto_start:=true`
+
 - `rviz`: Launch RViz2 for visualization (default: true)
+  - Example: `rviz:=false`
+
+**Example with multiple parameters**:
+```bash
+ros2 launch raspicat_tvvf_navigation waypoint_navigation.launch.py \
+  use_sim_time:=true \
+  auto_start:=true \
+  waypoint_csv:=/home/user/my_waypoints.csv
+```
 
 ## Waypoint Navigation Control
 
@@ -89,29 +128,82 @@ ros2 service call /skip_current_waypoint std_srvs/srv/Trigger
 Define waypoints in a CSV file (`maps/maps.csv`):
 
 ```csv
-x,y,theta
-0.0,0.0,0.0
-2.0,1.0,1.57
-4.0,0.0,3.14
+id,pose_x,pose_y,pose_z,rot_x,rot_y,rot_z,rot_w,command,
+0,0.0,0.0,0.0,0,0,0,1,
+1,2.0,1.0,0.0,0,0,0.7071068,0.7071068,
+2,4.0,0.0,0.0,0,0,1,0,
 ```
 
 **Format Details**:
-- First line must be header: `x,y,theta`
-- Each subsequent line is a waypoint
-- `x`: X coordinate in map frame (meters)
-- `y`: Y coordinate in map frame (meters)
-- `theta`: Orientation in map frame (radians, 0 = facing +X axis)
-- Comments or empty lines are not supported
+- **First line must be header**: `id,pose_x,pose_y,pose_z,rot_x,rot_y,rot_z,rot_w,command,`
+- **Each subsequent line is a waypoint**:
+  - `id` (int): Waypoint ID (0-indexed)
+  - `pose_x`, `pose_y`, `pose_z` (double): 3D position in map frame (meters)
+  - `rot_x`, `rot_y`, `rot_z`, `rot_w` (double): Orientation as quaternion
+  - `command` (string, optional): Special command to execute at this waypoint (see below)
+- **Quaternion orientation**: Use online converters or tf transformations to convert from Euler angles
+  - Example: yaw=0° → (0,0,0,1), yaw=90° → (0,0,0.7071068,0.7071068), yaw=180° → (0,0,1,0)
+- **Empty lines are skipped**, but comments are not supported
 
 **Example with 5 waypoints**:
 ```csv
-x,y,theta
-0.0,0.0,0.0
-1.0,0.0,0.0
-1.0,1.0,1.57
-0.0,1.0,3.14
-0.0,0.0,0.0
+id,pose_x,pose_y,pose_z,rot_x,rot_y,rot_z,rot_w,command,
+0,0.0,0.0,0.0,0,0,0,1,
+1,1.0,0.0,0.0,0,0,0,1,
+2,1.0,1.0,0.0,0,0,0.7071068,0.7071068,
+3,0.0,1.0,0.0,0,0,1,0,
+4,0.0,0.0,0.0,0,0,-1,0,
 ```
+
+### Waypoint Command Field
+
+The `command` field allows special behaviors at waypoints (e.g., stopping at crosswalks, waiting for traffic lights).
+
+**Supported Commands**:
+
+1. **Empty or no command** - Normal waypoint, proceed immediately to next
+   ```csv
+   0,1.0,2.0,0.0,0,0,0,1,
+   ```
+
+2. **`wait:N`** - Wait for N seconds, then automatically proceed to next waypoint
+   ```csv
+   1,5.0,2.0,0.0,0,0,0,1,wait:5.0
+   ```
+   - Example: Stop at stop line for 5 seconds
+
+3. **`pause`** - Wait until `/resume_waypoint_navigation` service is called
+   ```csv
+   2,10.0,2.0,0.0,0,0,0,1,pause
+   ```
+   - Example: Stop at checkpoint, wait for manual confirmation
+   - Resume: `ros2 service call /resume_waypoint_navigation std_srvs/srv/Trigger`
+
+4. **`wait_topic:/topic_name`** - Wait until specified Bool topic publishes `true`
+   ```csv
+   3,10.5,2.0,0.0,0,0,0,1,wait_topic:/crossing_safe
+   ```
+   - Example: Stop at crosswalk, wait for external node to confirm safety
+   - Topic type: `std_msgs/msg/Bool`
+   - Automatically proceeds when topic receives `data: true`
+
+**Skip any waiting state**: Use `/skip_current_waypoint` service to force skip current waypoint
+```bash
+ros2 service call /skip_current_waypoint std_srvs/srv/Trigger
+```
+
+**Practical Example - Crosswalk Navigation**:
+```csv
+id,pose_x,pose_y,pose_z,rot_x,rot_y,rot_z,rot_w,command,
+0,0.0,0.0,0.0,0,0,0,1,
+1,5.0,0.0,0.0,0,0,0,1,
+2,9.5,0.0,0.0,0,0,0,1,wait:3.0
+3,10.0,0.0,0.0,0,0,0,1,wait_topic:/traffic_light_green
+4,15.0,0.0,0.0,0,0,0,1,
+```
+- Waypoint 2: Stop at stop line for 3 seconds
+- Waypoint 3: Wait for external traffic light detection node to publish `true` to `/traffic_light_green`
+- Waypoint 4: Cross and continue
 
 ## Waypoint Follower Parameters
 

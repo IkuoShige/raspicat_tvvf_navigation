@@ -3,7 +3,7 @@ waypoint_follower_node:
     # Path to waypoint CSV file
     # Note: When launching without a launch file, this path must be absolute or relative to the execution directory
     # Launch files will override this with proper package path resolution
-    waypoint_csv_path: "/home/ikuo/docker_play/s1_ws/src/ros2_ws/src/raspicat_tvvf_navigation/maps/maps.csv"
+    waypoint_csv_path: "/home/ikuo/docker_play/s1_ws/src/ros2_ws/src/raspicat_tvvf_navigation/maps/maps_test.csv"
 
     # Waypoint tolerance
     position_tolerance: 0.3  # meters
@@ -14,7 +14,7 @@ waypoint_follower_node:
     goal_timeout: 30.0  # seconds
 
     # Behavior settings
-    auto_start: false  # Automatically start navigation on node launch (true/false)
+    auto_start: true  # Automatically start navigation on node launch (true/false)
     enable_skip_on_timeout: true  # Skip waypoint after max retries
     loop_navigation: false  # Stop after completing all waypoints
 

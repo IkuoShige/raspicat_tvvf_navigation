@@ -4,6 +4,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include <visualization_msgs/msg/marker_array.hpp>
+#include <std_msgs/msg/bool.hpp>
 #include <std_srvs/srv/trigger.hpp>
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_listener.h>
@@ -26,6 +27,14 @@ enum class NavigationState
   EXECUTING_COMMAND,
   COMPLETED,
   ERROR
+};
+
+enum class WaitReason
+{
+  NONE,           // Not waiting
+  TIME,           // wait:N - waiting for time duration
+  TOPIC,          // wait_topic:/topic_name - waiting for topic
+  PAUSE           // pause - waiting for manual resume
 };
 
 class WaypointFollowerNode : public rclcpp::Node
@@ -58,6 +67,10 @@ private:
   // Command execution
   void executeWaypointCommand(const std::string& command);
   bool parseWaitCommand(const std::string& command, double& wait_seconds);
+  bool parseWaitTopicCommand(const std::string& command, std::string& topic_name);
+
+  // Wait topic callback
+  void waitTopicCallback(const std_msgs::msg::Bool::SharedPtr msg);
 
   // RViz visualization
   void publishWaypointMarkers();
@@ -88,6 +101,9 @@ private:
   rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr goal_pose_pub_;
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr waypoint_markers_pub_;
   rclcpp::Publisher<msg::WaypointStatus>::SharedPtr status_pub_;
+
+  // Subscribers
+  rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr wait_topic_sub_;
 
   // Services
   rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr start_service_;
@@ -122,6 +138,9 @@ private:
   rclcpp::Time goal_sent_time_;
   rclcpp::Time wait_start_time_;
   double wait_duration_;
+  WaitReason wait_reason_;
+  std::string wait_topic_name_;
+  bool wait_topic_received_;
   std::string error_message_;
 };
 
