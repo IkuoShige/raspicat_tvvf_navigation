@@ -4,32 +4,21 @@ TVVF (Time-Varying Vector Field) based navigation and waypoint following system 
 
 ## Quick start: sim
 
-**Option 1: Auto-start (recommended)**
 ```bash
 # Terminal 1: Launch Gazebo
 ros2 launch raspicat_gazebo raspicat_gazebo_livox.launch.py
 
-# Terminal 2: Launch navigation with auto-start
-ros2 launch raspicat_tvvf_navigation waypoint_navigation.launch.py \
-  use_sim_time:=true \
-  auto_start:=true
+# Terminal 2: Launch navigation
+ros2 launch raspicat_tvvf_navigation waypoint_navigation.launch.py use_sim_time:=true
 
 # Terminal 3: Enable motor (wait for Gazebo to be fully loaded)
 ros2 service call /motor_power std_srvs/SetBool '{data: true}'
-```
 
-**Option 2: Manual start**
-```bash
-# Terminal 1: Launch Gazebo
-ros2 launch raspicat_gazebo raspicat_gazebo_livox.launch.py
-
-# Terminal 2: Launch navigation (auto_start is false by default)
-ros2 launch raspicat_tvvf_navigation waypoint_navigation.launch.py use_sim_time:=true
-
-# Terminal 3: Enable motor and start navigation manually
-ros2 service call /motor_power std_srvs/SetBool '{data: true}'
+# If auto_start is disabled in config/waypoint_follower_params.yaml:
 ros2 service call /start_waypoint_navigation std_srvs/srv/Trigger
 ```
+
+**Note**: All waypoint navigation parameters (including `auto_start` and `waypoint_csv_path`) are configured in `config/waypoint_follower_params.yaml`. Launch file arguments have been removed in favor of centralized YAML configuration.
 
 ## Overview
 
@@ -37,7 +26,9 @@ This package provides a **unified, self-contained navigation solution** for the 
 - **Livox MID-360** 3D LiDAR sensor
 - **TVVF-based local planner** (tvvf_vo_c) with differential drive support
 - **Complete navigation stack**: map_scan_manager, emcl2, obstacle_tracker
-- **Waypoint follower**: Autonomous waypoint navigation
+- **Waypoint follower**: Autonomous waypoint navigation with advanced command support
+- **Centralized configuration**: All parameters managed through YAML files
+- **Waypoint editor integration**: Compatible with [waypoint_editor](https://github.com/kzm784/waypoint_editor) for easy waypoint creation
 
 This package is **completely independent** with no dependency on robomaster_s1 packages.
 
@@ -62,20 +53,22 @@ This package is **completely independent** with no dependency on robomaster_s1 p
 # Terminal 1: Start Gazebo with Livox-equipped Raspicat
 ros2 launch raspicat_gazebo raspicat_gazebo_livox.launch.py
 
-# Terminal 2: Start Navigation + Waypoint system
-ros2 launch raspicat_tvvf_navigation waypoint_navigation.launch.py use_sim_time:=true
+# Terminal 2: Start Navigation + Waypoint system (edit config/waypoint_follower_params.yaml to set `use_sim_time:=true`, `auto_start:=true`)
+ros2 launch raspicat_tvvf_navigation waypoint_navigation.launch.py
 ```
 
 ### Real Robot
 
 ```bash
-# Single command - no Gazebo needed
+# Single command - no Gazebo needed (edit config/waypoint_follower_params.yaml to set `use_sim_time:=false`, `auto_start:=true`)
 ros2 launch raspicat_tvvf_navigation waypoint_navigation.launch.py use_sim_time:=false
 ```
 
 ### Launch Parameters
 
-- `use_sim_time`: Use simulation time (default: false)
+Only minimal launch arguments are supported:
+
+- `use_sim_time`: Use simulation time (default: true)
   - `true` for Gazebo simulation
   - `false` for real robot
   - Example: `use_sim_time:=true`
@@ -84,24 +77,20 @@ ros2 launch raspicat_tvvf_navigation waypoint_navigation.launch.py use_sim_time:
   - Absolute path to custom map file
   - Example: `map_file:=/path/to/your/map.yaml`
 
-- `waypoint_csv`: Path to waypoint CSV file (default: maps/maps.csv)
-  - Absolute path to custom waypoint file
-  - Example: `waypoint_csv:=/path/to/your/waypoints.csv`
-
-- `auto_start`: Automatically start waypoint navigation (default: false)
-  - `true`: Start navigation immediately after launch
-  - `false`: Wait for `/start_waypoint_navigation` service call
-  - Example: `auto_start:=true`
-
 - `rviz`: Launch RViz2 for visualization (default: true)
   - Example: `rviz:=false`
 
-**Example with multiple parameters**:
+**Waypoint and behavior parameters** are configured in `config/waypoint_follower_params.yaml`:
+- `waypoint_csv_path`: Path to waypoint CSV file
+- `auto_start`: Automatically start navigation on launch (true/false)
+- `position_tolerance`, `orientation_tolerance`: Waypoint reach thresholds
+- `loop_navigation`: Loop back to first waypoint after completing all
+- Other parameters (see Waypoint Follower Parameters section below)
+
+**Example**:
 ```bash
-ros2 launch raspicat_tvvf_navigation waypoint_navigation.launch.py \
-  use_sim_time:=true \
-  auto_start:=true \
-  waypoint_csv:=/home/user/my_waypoints.csv
+# Edit config/waypoint_follower_params.yaml to set waypoint_csv_path and auto_start
+ros2 launch raspicat_tvvf_navigation waypoint_navigation.launch.py use_sim_time:=true
 ```
 
 ## Waypoint Navigation Control
@@ -125,7 +114,9 @@ ros2 service call /skip_current_waypoint std_srvs/srv/Trigger
 
 ## Waypoint CSV Format
 
-Define waypoints in a CSV file (`maps/maps.csv`):
+Waypoint CSV files should be created using [waypoint_editor](https://github.com/kzm784/waypoint_editor) - a GUI tool for creating and editing waypoint files with map visualization.
+
+Example CSV format (`maps/maps.csv`):
 
 ```csv
 id,pose_x,pose_y,pose_z,rot_x,rot_y,rot_z,rot_w,command,
@@ -181,11 +172,12 @@ The `command` field allows special behaviors at waypoints (e.g., stopping at cro
 
 4. **`wait_topic:/topic_name`** - Wait until specified Bool topic publishes `true`
    ```csv
-   3,10.5,2.0,0.0,0,0,0,1,wait_topic:/crossing_safe
+   3,10.5,2.0,0.0,0,0,0,1,wait_topic:/test_crossing_safe
    ```
    - Example: Stop at crosswalk, wait for external node to confirm safety
    - Topic type: `std_msgs/msg/Bool`
    - Automatically proceeds when topic receives `data: true`
+   - Resume: `ros2 topic pub /test_crossing_safe std_msgs/Bool "data: true"`
 
 **Skip any waiting state**: Use `/skip_current_waypoint` service to force skip current waypoint
 ```bash
@@ -207,11 +199,13 @@ id,pose_x,pose_y,pose_z,rot_x,rot_y,rot_z,rot_w,command,
 
 ## Waypoint Follower Parameters
 
-All parameters can be configured in `config/waypoint_follower_params.yaml`:
+**All parameters must be configured in `config/waypoint_follower_params.yaml`**. Launch file arguments for waypoint settings have been removed in favor of centralized YAML configuration.
 
 ### Path Configuration
-- `waypoint_csv_path` (string): Path to CSV file with waypoints
-  - Default: `"maps/maps.csv"`
+- `waypoint_csv_path` (string): Absolute path to CSV file with waypoints
+  - Default: `"/home/ikuo/docker_play/s1_ws/src/ros2_ws/src/raspicat_tvvf_navigation/maps/maps.csv"`
+  - **Important**: Update this path to match your system and waypoint file location
+  - Waypoint files should be created using [waypoint_editor](https://github.com/kzm784/waypoint_editor)
 
 ### Tolerance Settings
 - `position_tolerance` (double): How close robot must get to waypoint position (meters)
@@ -241,6 +235,43 @@ All parameters can be configured in `config/waypoint_follower_params.yaml`:
   - Default: `"map"`
 - `robot_base_frame` (string): Robot base frame name
   - Default: `"base_link"`
+
+### Configuration Example
+
+Edit `config/waypoint_follower_params.yaml`:
+
+```yaml
+waypoint_follower_node:
+  ros__parameters:
+    # Path to waypoint CSV file (use absolute path)
+    waypoint_csv_path: "/home/your_username/your_workspace/waypoints/my_waypoints.csv"
+
+    # Waypoint tolerance
+    position_tolerance: 0.3  # meters
+    orientation_tolerance: 3.14  # radians
+
+    # Retry and timeout settings
+    max_retry_count: 3
+    goal_timeout: 30.0  # seconds
+
+    # Behavior settings
+    auto_start: true  # Set to true to start navigation immediately
+    enable_skip_on_timeout: true
+    loop_navigation: false  # Set to true for continuous loop
+
+    # Frame IDs
+    global_frame: "map"
+    robot_base_frame: "base_link"
+
+    # Use simulation time (set to true for Gazebo)
+    use_sim_time: true
+```
+
+**Note**: After editing the YAML file, rebuild the package:
+```bash
+cd /path/to/your/workspace
+colcon build --packages-select raspicat_tvvf_navigation --symlink-install
+```
 
 ## Package Structure
 
@@ -334,24 +365,36 @@ ros2 topic echo /waypoint_status
 ✅ **Differential Drive Support**: TVVF planner properly handles non-holonomic constraints
 ✅ **Livox Integration**: Full 3D LiDAR support with 2D scan generation
 ✅ **Easy Deployment**: Simple two-step process for simulation, one-step for real robot
+✅ **Centralized YAML Configuration**: All waypoint and behavior parameters in one config file
+✅ **Waypoint Editor Integration**: Compatible with [waypoint_editor](https://github.com/kzm784/waypoint_editor) GUI tool
+✅ **Advanced Waypoint Commands**: Support for timed waits, manual pauses, and topic-based triggers
 
 ## Example Workflow
 
 ### Development in Simulation
-1. Start Gazebo: `ros2 launch raspicat_gazebo raspicat_gazebo_livox.launch.py`
-2. Wait for robot to spawn and Gazebo to be ready
-3. Enable motor: `ros2 service call /motor_power std_srvs/SetBool '{data: true}'`
-4. Start navigation: `ros2 launch raspicat_tvvf_navigation waypoint_navigation.launch.py use_sim_time:=true`
-5. Set initial pose in RViz (if needed)
-6. Start waypoint navigation: `ros2 service call /start_waypoint_navigation std_srvs/srv/Trigger`
-   - Or use `auto_start:=true` in step 4 to skip this step
+1. **Create waypoints** using [waypoint_editor](https://github.com/kzm784/waypoint_editor)
+2. **Configure parameters**: Edit `config/waypoint_follower_params.yaml`
+   - Set `waypoint_csv_path` to your waypoint file
+   - Set `auto_start: true` for automatic start (optional)
+   - Set `use_sim_time: true` for Gazebo
+3. **Rebuild package**: `colcon build --packages-select raspicat_tvvf_navigation --symlink-install`
+4. **Start Gazebo**: `ros2 launch raspicat_gazebo raspicat_gazebo_livox.launch.py`
+5. **Wait for robot to spawn** and Gazebo to be ready
+6. **Start navigation**: `ros2 launch raspicat_tvvf_navigation waypoint_navigation.launch.py use_sim_time:=true`
+7. **Enable motor**: `ros2 service call /motor_power std_srvs/SetBool '{data: true}'`
+8. **Set initial pose** in RViz (if needed)
+9. If `auto_start: false`, start manually: `ros2 service call /start_waypoint_navigation std_srvs/srv/Trigger`
 
 ### Deployment to Real Robot
-1. Copy maps and waypoints to robot
-2. Launch: `ros2 launch raspicat_tvvf_navigation waypoint_navigation.launch.py use_sim_time:=false`
-3. Set initial pose in RViz
-4. Start waypoint navigation: `ros2 service call /start_waypoint_navigation std_srvs/srv/Trigger`
-   - Or use `auto_start:=true` in step 2 to skip this step
+1. **Create waypoints** using [waypoint_editor](https://github.com/kzm784/waypoint_editor) on the real map
+2. **Configure parameters**: Edit `config/waypoint_follower_params.yaml`
+   - Set `waypoint_csv_path` to your waypoint file (use absolute path)
+   - Set `auto_start: true` for automatic start (optional)
+   - Set `use_sim_time: false` for real robot
+3. **Copy package** to robot or build on robot
+4. **Launch navigation**: `ros2 launch raspicat_tvvf_navigation waypoint_navigation.launch.py use_sim_time:=false`
+5. **Set initial pose** in RViz
+6. If `auto_start: false`, start manually: `ros2 service call /start_waypoint_navigation std_srvs/srv/Trigger`
 
 ## Dependencies
 
