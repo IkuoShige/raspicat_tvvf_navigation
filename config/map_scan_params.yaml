@@ -1,0 +1,23 @@
+/**:
+  ros__parameters:
+    # Scan conversion parameters
+    scan_frame_id: "livox"  # LiDAR frame ID for Raspicat
+    scan_angle_increment_factor: 10  # Angle increment factor
+    scan_range_min: 0.1  # Minimum scan range (m)
+    scan_range_max: 100.0  # Maximum scan range (m)
+    pointcloud_publish: true  # Enable pointcloud output for debugging
+
+    # Topic settings
+    input_pointcloud_topic: "/livox/lidar"  # Input pointcloud topic from Livox Mid-360
+    localization_scan_topic: "scan/localization"  # Localization scan topic
+    obstacle_detection_scan_topic: "scan"  # Obstacle detection scan topic
+    localization_pointcloud_topic: "pointcloud/localization"  # Localization pointcloud topic
+    obstacle_detection_pointcloud_topic: "pointcloud/obstacle"  # Obstacle detection pointcloud topic
+
+    # Laser scan height settings
+    # For Raspicat: Ground clearance ~7.6cm, total height ~15cm
+    # Livox Mid-360 mounted at ~20cm height
+    default_localization_laser_height_min: 0.15  # Min height for localization (m)
+    default_localization_laser_height_max: 2.0  # Max height for localization (m)
+    obstacle_detection_laser_height_min: 0.0  # Min height for obstacle detection (m)
+    obstacle_detection_laser_height_max: 0.4  # Max height for obstacle detection (m)

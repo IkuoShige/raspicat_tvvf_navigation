@@ -1,0 +1,18 @@
+/**:
+  ros__parameters:
+    # DBSCAN clustering parameters
+    cluster_tolerance: 0.3  # Maximum distance between points in a cluster (m)
+    min_cluster_size: 3  # Minimum number of points to form a cluster
+    max_cluster_size: 500  # Maximum number of points in a cluster
+
+    # Obstacle classification parameters
+    static_velocity_threshold: 0.1  # Velocity threshold for static/dynamic classification (m/s)
+    tracking_timeout: 1.0  # Timeout for obstacle tracking (s)
+
+    # Frame settings
+    base_frame: "base_link"
+    laser_frame: "livox"
+
+    # Visualization settings
+    publish_markers: true  # Enable marker visualization
+    marker_lifetime: 0.5  # Marker lifetime in RViz (s)

@@ -1,0 +1,16 @@
+/**:
+  ros__parameters:
+    # Default map setting for museum environment
+    default_map_yaml: "maps/museum.yaml"
+
+    # Map regions definition
+    # For single map operation (museum), define one region covering the whole map
+    regions:
+      - x_min: -100.0  # Region X minimum
+        x_max: 100.0   # Region X maximum
+        y_min: -100.0  # Region Y minimum
+        y_max: 100.0   # Region Y maximum
+        map_path: "maps/museum.yaml"  # Map file path
+        localization_laser_height_min: 0.15  # Min laser height in this region (m)
+        localization_laser_height_max: 2.0  # Max laser height in this region (m)
+        priority: 1  # Region priority (higher value = higher priority)

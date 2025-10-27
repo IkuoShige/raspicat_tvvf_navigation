@@ -1,0 +1,39 @@
+/**:
+  ros__parameters:
+    # Odometry and TF settings
+    odom_freq: 20  # Odometry update frequency (Hz)
+    transform_tolerance: 0.2  # Transform tolerance (s)
+    global_frame_id: "map"
+    odom_frame_id: "odom"
+    base_frame_id: "base_link"
+    footprint_frame_id: "base_footprint"  # Raspicat uses base_link
+
+    # Laser scan settings
+    laser_min_range: 0.1  # Minimum valid laser range (m)
+    #laser_max_range: 50.0  # Maximum valid laser range (m)
+    laser_max_range: 100000000.0  # Maximum valid laser range (m)
+    scan_increment: 1  # Scan beam increment for processing
+
+    # Initial pose (can be set via initialpose topic in RViz)
+    initial_pose_x: 0.0  # Initial X position (m)
+    initial_pose_y: 0.0  # Initial Y position (m)
+    initial_pose_a: 0.0  # Initial yaw angle (rad)
+
+    # MCL particle filter settings
+    num_particles: 500  # Number of particles
+    alpha_threshold: 0.5  # Threshold for expansion resetting
+    expansion_radius_position: 0.1  # Max position change during reset (m)
+    expansion_radius_orientation: 0.2  # Max orientation change during reset (rad)
+    extraction_rate: 0.1  # Rate of particles checked for validity
+    range_threshold: 0.3  # Threshold for laser range validity (rad)
+    sensor_reset: false  # Disable sensor resetting for stability
+
+    # Odometry noise model (adjusted for differential drive)
+    # Raspicat has differential drive which is more predictable than mecanum
+    odom_fw_dev_per_fw: 0.19  # Forward motion noise per forward motion (m/m)
+    odom_fw_dev_per_rot: 0.0001  # Forward motion noise per rotation (m/rad)
+    odom_rot_dev_per_fw: 0.13  # Rotation noise per forward motion (rad/m)
+    odom_rot_dev_per_rot: 0.2  # Rotation noise per rotation (rad/rad)
+
+    # Laser likelihood field settings
+    laser_likelihood_max_dist: 0.2  # Max distance for likelihood field (m)

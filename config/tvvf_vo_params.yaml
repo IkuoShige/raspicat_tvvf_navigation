@@ -1,0 +1,55 @@
+tvvf_vo_c_node:
+  ros__parameters:
+    # TVVF basic parameters
+    k_attraction: 1.0  # Attraction field strength
+    k_repulsion: 2.0  # Repulsion field strength
+    influence_radius: 2.0  # Obstacle influence radius (m) - reduced for indoor
+
+    # Path integration parameters
+    k_path_attraction: 2.0  # Path following attraction strength
+    path_influence_radius: 1.5  # Path influence radius (m)
+    lookahead_distance: 1.0  # Lookahead distance (m) - reduced for indoor
+
+    # Obstacle avoidance parameters
+    safety_margin: 0.12  # Safety margin (m) - Raspicat is compact
+
+    # Robot specification parameters (Raspicat)
+    max_linear_velocity: 0.4  # Maximum linear velocity (m/s) - conservative for indoor
+    max_angular_velocity: 1.2  # Maximum angular velocity (rad/s)
+    max_acceleration: 0.5  # Maximum acceleration (m/s²)
+    robot_radius: 0.15  # Robot radius including margin (m)
+    wheel_base: 0.160  # Wheelbase (m) - approximate for Raspicat
+    orientation_tolerance: 0.2  # Orientation tolerance (rad)
+
+    # Frame names
+    base_frame: "base_link"  # Robot base frame
+    global_frame: "map"  # Global frame
+    laser_frame: "livox"  # LiDAR frame
+
+    # Control parameters
+    goal_tolerance: 0.15  # Goal tolerance (m)
+
+    # Prediction parameters
+    prediction_dt: 0.1  # Prediction time step (s)
+    uncertainty_growth: 0.1  # Uncertainty growth rate
+
+    # Optimization parameters
+    direction_weight: 1.0  # Direction weight
+    safety_weight: 2.0  # Safety weight
+    efficiency_weight: 0.5  # Efficiency weight
+
+    # Numerical stability
+    min_distance: 1.0e-6  # Minimum distance limit
+
+    # Performance
+    max_computation_time: 0.05  # Maximum computation time (s)
+
+    # Debug and visualization
+    enable_visualization: true  # Enable visualization markers
+    enable_vector_field_viz: true  # Enable vector field visualization
+    vector_field_resolution: 0.5  # Vector field sampling resolution (m)
+    vector_field_range: 3.0  # Vector field visualization range (m)
+    vector_scale_factor: 0.3  # Vector arrow scale factor
+    max_vector_points: 300  # Maximum vector points
+    min_vector_magnitude: 0.05  # Minimum vector magnitude for display
+    viz_update_rate: 5.0  # Visualization update rate (Hz)

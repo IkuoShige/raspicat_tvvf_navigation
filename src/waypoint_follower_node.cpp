@@ -1,0 +1,557 @@
+#include "raspicat_tvvf_navigation/waypoint_follower_node.hpp"
+#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
+#include <chrono>
+
+using namespace std::chrono_literals;
+
+namespace raspicat_tvvf_navigation
+{
+
+WaypointFollowerNode::WaypointFollowerNode()
+: Node("waypoint_follower_node"),
+  current_state_(NavigationState::IDLE),
+  paused_(false),
+  wait_duration_(0.0)
+{
+  // Declare parameters
+  this->declare_parameter("waypoint_csv_path", "");
+  this->declare_parameter("position_tolerance", 0.3);
+  this->declare_parameter("orientation_tolerance", 0.3);
+  this->declare_parameter("max_retry_count", 3);
+  this->declare_parameter("goal_timeout", 30.0);
+  this->declare_parameter("auto_start", false);
+  this->declare_parameter("enable_skip_on_timeout", true);
+  this->declare_parameter("loop_navigation", false);
+  this->declare_parameter("global_frame", "map");
+  this->declare_parameter("robot_base_frame", "base_link");
+
+  // Get parameters
+  waypoint_csv_path_ = this->get_parameter("waypoint_csv_path").as_string();
+  position_tolerance_ = this->get_parameter("position_tolerance").as_double();
+  orientation_tolerance_ = this->get_parameter("orientation_tolerance").as_double();
+  max_retry_count_ = this->get_parameter("max_retry_count").as_int();
+  goal_timeout_ = this->get_parameter("goal_timeout").as_double();
+  auto_start_ = this->get_parameter("auto_start").as_bool();
+  enable_skip_on_timeout_ = this->get_parameter("enable_skip_on_timeout").as_bool();
+  loop_navigation_ = this->get_parameter("loop_navigation").as_bool();
+  global_frame_ = this->get_parameter("global_frame").as_string();
+  robot_base_frame_ = this->get_parameter("robot_base_frame").as_string();
+
+  // Create waypoint manager
+  waypoint_manager_ = std::make_unique<WaypointManager>(
+    position_tolerance_, orientation_tolerance_);
+
+  // TF
+  tf_buffer_ = std::make_shared<tf2_ros::Buffer>(this->get_clock());
+  tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
+
+  // Publishers
+  goal_pose_pub_ = this->create_publisher<geometry_msgs::msg::PoseStamped>(
+    "goal_pose", 10);
+  waypoint_markers_pub_ = this->create_publisher<visualization_msgs::msg::MarkerArray>(
+    "waypoint_markers", 10);
+  status_pub_ = this->create_publisher<msg::WaypointStatus>(
+    "waypoint_status", 10);
+
+  // Services
+  start_service_ = this->create_service<std_srvs::srv::Trigger>(
+    "start_waypoint_navigation",
+    std::bind(&WaypointFollowerNode::startNavigationCallback, this,
+              std::placeholders::_1, std::placeholders::_2));
+
+  pause_service_ = this->create_service<std_srvs::srv::Trigger>(
+    "pause_waypoint_navigation",
+    std::bind(&WaypointFollowerNode::pauseNavigationCallback, this,
+              std::placeholders::_1, std::placeholders::_2));
+
+  resume_service_ = this->create_service<std_srvs::srv::Trigger>(
+    "resume_waypoint_navigation",
+    std::bind(&WaypointFollowerNode::resumeNavigationCallback, this,
+              std::placeholders::_1, std::placeholders::_2));
+
+  skip_service_ = this->create_service<std_srvs::srv::Trigger>(
+    "skip_current_waypoint",
+    std::bind(&WaypointFollowerNode::skipWaypointCallback, this,
+              std::placeholders::_1, std::placeholders::_2));
+
+  // Control timer (10 Hz)
+  control_timer_ = this->create_wall_timer(
+    100ms, std::bind(&WaypointFollowerNode::controlLoop, this));
+
+  // Initialize timestamps with node clock to avoid time source mismatch
+  initializeTimestamps();
+
+  RCLCPP_INFO(this->get_logger(), "Waypoint Follower Node initialized");
+  RCLCPP_INFO(this->get_logger(), "CSV path: %s", waypoint_csv_path_.c_str());
+
+  // Auto-start navigation if enabled
+  if (auto_start_) {
+    RCLCPP_INFO(this->get_logger(), "Auto-start enabled, beginning navigation...");
+    waypoint_manager_->reset();
+    paused_ = false;
+    transitionToState(NavigationState::LOADING_WAYPOINTS);
+  }
+}
+
+void WaypointFollowerNode::initializeTimestamps()
+{
+  // Initialize timestamps with node clock to match use_sim_time setting
+  const auto now = this->now();
+  goal_sent_time_ = now;
+  wait_start_time_ = now;
+}
+
+void WaypointFollowerNode::controlLoop()
+{
+  if (paused_) {
+    return;
+  }
+
+  switch (current_state_) {
+    case NavigationState::IDLE:
+      handleIdleState();
+      break;
+    case NavigationState::LOADING_WAYPOINTS:
+      handleLoadingState();
+      break;
+    case NavigationState::NAVIGATING:
+      handleNavigatingState();
+      break;
+    case NavigationState::WAYPOINT_REACHED:
+      handleWaypointReachedState();
+      break;
+    case NavigationState::WAITING:
+      handleWaitingState();
+      break;
+    case NavigationState::EXECUTING_COMMAND:
+      handleExecutingCommandState();
+      break;
+    case NavigationState::COMPLETED:
+      handleCompletedState();
+      break;
+    case NavigationState::ERROR:
+      handleErrorState();
+      break;
+  }
+
+  // Publish visualization and status
+  publishWaypointMarkers();
+
+  // Publish status
+  auto status_msg = msg::WaypointStatus();
+  auto current_wp = waypoint_manager_->getCurrentWaypoint();
+
+  if (current_wp.has_value()) {
+    status_msg.current_waypoint_id = current_wp->id;
+    status_msg.current_command = current_wp->command;
+
+    auto robot_pose = getRobotPose();
+    if (robot_pose.has_value()) {
+      status_msg.distance_to_goal = waypoint_manager_->getDistanceToWaypoint(*robot_pose);
+      status_msg.orientation_diff = waypoint_manager_->getOrientationDiff(*robot_pose);
+    }
+  } else {
+    status_msg.current_waypoint_id = -1;
+  }
+
+  status_msg.total_waypoints = static_cast<int>(waypoint_manager_->getTotalWaypoints());
+  status_msg.completed_waypoints = static_cast<int>(waypoint_manager_->getCompletedWaypoints());
+  status_msg.skipped_waypoints = static_cast<int>(waypoint_manager_->getSkippedWaypoints());
+  status_msg.state = stateToString(current_state_);
+
+  status_pub_->publish(status_msg);
+}
+
+void WaypointFollowerNode::handleIdleState()
+{
+  // Do nothing, waiting for start service call
+}
+
+void WaypointFollowerNode::handleLoadingState()
+{
+  RCLCPP_INFO(this->get_logger(), "Loading waypoints from: %s", waypoint_csv_path_.c_str());
+
+  if (waypoint_manager_->loadWaypoints(waypoint_csv_path_)) {
+    RCLCPP_INFO(this->get_logger(), "Successfully loaded %zu waypoints",
+                waypoint_manager_->getTotalWaypoints());
+    transitionToState(NavigationState::NAVIGATING);
+  } else {
+    error_message_ = "Failed to load waypoints from CSV file";
+    transitionToState(NavigationState::ERROR);
+  }
+}
+
+void WaypointFollowerNode::handleNavigatingState()
+{
+  auto current_wp = waypoint_manager_->getCurrentWaypoint();
+
+  if (!current_wp.has_value()) {
+    // No more waypoints
+    transitionToState(NavigationState::COMPLETED);
+    return;
+  }
+
+  auto robot_pose = getRobotPose();
+  if (!robot_pose.has_value()) {
+    RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+                         "Cannot get robot pose");
+    return;
+  }
+
+  // Check if waypoint is reached
+  if (waypoint_manager_->isWaypointReached(*robot_pose)) {
+    RCLCPP_INFO(this->get_logger(), "Waypoint %d reached!", current_wp->id);
+    transitionToState(NavigationState::WAYPOINT_REACHED);
+    return;
+  }
+
+  // Check timeout
+  if ((this->now() - goal_sent_time_).seconds() > goal_timeout_) {
+    RCLCPP_WARN(this->get_logger(), "Goal timeout for waypoint %d", current_wp->id);
+
+    waypoint_manager_->incrementRetryCount();
+
+    if (waypoint_manager_->getCurrentRetryCount() >= max_retry_count_) {
+      if (enable_skip_on_timeout_) {
+        RCLCPP_WARN(this->get_logger(), "Max retries reached, skipping waypoint %d",
+                    current_wp->id);
+        waypoint_manager_->skipCurrentWaypoint();
+        transitionToState(NavigationState::NAVIGATING);
+      } else {
+        error_message_ = "Max retries reached for waypoint " +
+                        std::to_string(current_wp->id);
+        transitionToState(NavigationState::ERROR);
+      }
+      return;
+    }
+
+    // Retry: send goal again
+    RCLCPP_INFO(this->get_logger(), "Retrying waypoint %d (attempt %d/%d)",
+                current_wp->id,
+                waypoint_manager_->getCurrentRetryCount() + 1,
+                max_retry_count_);
+  }
+
+  // Send goal pose to tvvf_vo_c
+  auto goal_msg = geometry_msgs::msg::PoseStamped();
+  goal_msg.header.stamp = this->now();
+  goal_msg.header.frame_id = global_frame_;
+  goal_msg.pose = current_wp->pose;
+
+  goal_pose_pub_->publish(goal_msg);
+  goal_sent_time_ = this->now();
+}
+
+void WaypointFollowerNode::handleWaypointReachedState()
+{
+  auto current_wp = waypoint_manager_->getCurrentWaypoint();
+  if (!current_wp.has_value()) {
+    transitionToState(NavigationState::COMPLETED);
+    return;
+  }
+
+  waypoint_manager_->markCurrentReached();
+
+  // Execute command
+  if (!current_wp->command.empty()) {
+    executeWaypointCommand(current_wp->command);
+  } else {
+    // No command, proceed to next waypoint
+    if (waypoint_manager_->isCompleted()) {
+      transitionToState(NavigationState::COMPLETED);
+    } else {
+      transitionToState(NavigationState::NAVIGATING);
+    }
+  }
+}
+
+void WaypointFollowerNode::handleWaitingState()
+{
+  if ((this->now() - wait_start_time_).seconds() >= wait_duration_) {
+    RCLCPP_INFO(this->get_logger(), "Wait complete");
+
+    if (waypoint_manager_->isCompleted()) {
+      transitionToState(NavigationState::COMPLETED);
+    } else {
+      transitionToState(NavigationState::NAVIGATING);
+    }
+  }
+}
+
+void WaypointFollowerNode::handleExecutingCommandState()
+{
+  // Currently handled in executeWaypointCommand
+  // Transition is done there
+}
+
+void WaypointFollowerNode::handleCompletedState()
+{
+  RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 5000,
+                       "All waypoints completed! Completed: %zu, Skipped: %zu",
+                       waypoint_manager_->getCompletedWaypoints(),
+                       waypoint_manager_->getSkippedWaypoints());
+}
+
+void WaypointFollowerNode::handleErrorState()
+{
+  RCLCPP_ERROR_THROTTLE(this->get_logger(), *this->get_clock(), 5000,
+                        "Navigation error: %s", error_message_.c_str());
+}
+
+void WaypointFollowerNode::executeWaypointCommand(const std::string& command)
+{
+  RCLCPP_INFO(this->get_logger(), "Executing command: %s", command.c_str());
+
+  if (command == "continue" || command.empty()) {
+    if (waypoint_manager_->isCompleted()) {
+      transitionToState(NavigationState::COMPLETED);
+    } else {
+      transitionToState(NavigationState::NAVIGATING);
+    }
+  }
+  else if (command == "stop") {
+    RCLCPP_INFO(this->get_logger(), "Stop command - pausing navigation");
+    paused_ = true;
+  }
+  else if (command.substr(0, 5) == "wait:") {
+    double wait_seconds;
+    if (parseWaitCommand(command, wait_seconds)) {
+      RCLCPP_INFO(this->get_logger(), "Waiting for %.1f seconds", wait_seconds);
+      wait_start_time_ = this->now();
+      wait_duration_ = wait_seconds;
+      transitionToState(NavigationState::WAITING);
+    } else {
+      RCLCPP_WARN(this->get_logger(), "Invalid wait command format: %s", command.c_str());
+      transitionToState(NavigationState::NAVIGATING);
+    }
+  }
+  else if (command == "skip_if_fail") {
+    // This is handled in the navigation timeout logic
+    if (waypoint_manager_->isCompleted()) {
+      transitionToState(NavigationState::COMPLETED);
+    } else {
+      transitionToState(NavigationState::NAVIGATING);
+    }
+  }
+  else {
+    RCLCPP_WARN(this->get_logger(), "Unknown command: %s, continuing...", command.c_str());
+    if (waypoint_manager_->isCompleted()) {
+      transitionToState(NavigationState::COMPLETED);
+    } else {
+      transitionToState(NavigationState::NAVIGATING);
+    }
+  }
+}
+
+bool WaypointFollowerNode::parseWaitCommand(const std::string& command, double& wait_seconds)
+{
+  try {
+    // Format: "wait:N" where N is seconds
+    size_t colon_pos = command.find(':');
+    if (colon_pos == std::string::npos) {
+      return false;
+    }
+
+    std::string seconds_str = command.substr(colon_pos + 1);
+    wait_seconds = std::stod(seconds_str);
+    return wait_seconds >= 0.0;
+  } catch (...) {
+    return false;
+  }
+}
+
+void WaypointFollowerNode::publishWaypointMarkers()
+{
+  visualization_msgs::msg::MarkerArray marker_array;
+
+  const auto& waypoints = waypoint_manager_->getAllWaypoints();
+  int current_index = waypoint_manager_->getCurrentIndex();
+
+  for (size_t i = 0; i < waypoints.size(); ++i) {
+    bool is_current = (static_cast<int>(i) == current_index);
+    bool is_reached = waypoints[i].reached;
+    bool is_skipped = waypoints[i].skipped;
+
+    auto marker = createWaypointMarker(waypoints[i], i, is_current, is_reached, is_skipped);
+    marker_array.markers.push_back(marker);
+  }
+
+  // Add path line markers
+  if (waypoints.size() > 1) {
+    visualization_msgs::msg::Marker line_marker;
+    line_marker.header.frame_id = global_frame_;
+    line_marker.header.stamp = this->now();
+    line_marker.ns = "waypoint_path";
+    line_marker.id = static_cast<int>(waypoints.size());
+    line_marker.type = visualization_msgs::msg::Marker::LINE_STRIP;
+    line_marker.action = visualization_msgs::msg::Marker::ADD;
+    line_marker.scale.x = 0.05;
+    line_marker.color.r = 0.5;
+    line_marker.color.g = 0.5;
+    line_marker.color.b = 1.0;
+    line_marker.color.a = 0.5;
+
+    for (const auto& wp : waypoints) {
+      geometry_msgs::msg::Point p;
+      p.x = wp.pose.position.x;
+      p.y = wp.pose.position.y;
+      p.z = wp.pose.position.z + 0.1;
+      line_marker.points.push_back(p);
+    }
+
+    marker_array.markers.push_back(line_marker);
+  }
+
+  waypoint_markers_pub_->publish(marker_array);
+}
+
+visualization_msgs::msg::Marker WaypointFollowerNode::createWaypointMarker(
+  const Waypoint& wp, int index, bool is_current, bool is_reached, bool is_skipped)
+{
+  visualization_msgs::msg::Marker marker;
+  marker.header.frame_id = global_frame_;
+  marker.header.stamp = this->now();
+  marker.ns = "waypoints";
+  marker.id = index;
+  marker.type = visualization_msgs::msg::Marker::ARROW;
+  marker.action = visualization_msgs::msg::Marker::ADD;
+
+  marker.pose = wp.pose;
+  marker.pose.position.z += 0.3;
+
+  marker.scale.x = 0.5;  // length
+  marker.scale.y = 0.1;  // width
+  marker.scale.z = 0.1;  // height
+
+  if (is_skipped) {
+    // Red for skipped
+    marker.color.r = 1.0;
+    marker.color.g = 0.0;
+    marker.color.b = 0.0;
+    marker.color.a = 0.7;
+  } else if (is_reached) {
+    // White for reached
+    marker.color.r = 0.8;
+    marker.color.g = 0.8;
+    marker.color.b = 0.8;
+    marker.color.a = 0.5;
+  } else if (is_current) {
+    // Green for current target
+    marker.color.r = 0.0;
+    marker.color.g = 1.0;
+    marker.color.b = 0.0;
+    marker.color.a = 1.0;
+  } else {
+    // Blue for pending
+    marker.color.r = 0.0;
+    marker.color.g = 0.5;
+    marker.color.b = 1.0;
+    marker.color.a = 0.7;
+  }
+
+  return marker;
+}
+
+std::optional<geometry_msgs::msg::Pose> WaypointFollowerNode::getRobotPose()
+{
+  try {
+    auto transform = tf_buffer_->lookupTransform(
+      global_frame_, robot_base_frame_, tf2::TimePointZero);
+
+    geometry_msgs::msg::Pose pose;
+    pose.position.x = transform.transform.translation.x;
+    pose.position.y = transform.transform.translation.y;
+    pose.position.z = transform.transform.translation.z;
+    pose.orientation = transform.transform.rotation;
+
+    return pose;
+  } catch (const tf2::TransformException& ex) {
+    RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+                         "Could not get robot pose: %s", ex.what());
+    return std::nullopt;
+  }
+}
+
+void WaypointFollowerNode::transitionToState(NavigationState new_state)
+{
+  if (current_state_ != new_state) {
+    RCLCPP_INFO(this->get_logger(), "State transition: %s -> %s",
+                stateToString(current_state_).c_str(),
+                stateToString(new_state).c_str());
+    current_state_ = new_state;
+  }
+}
+
+std::string WaypointFollowerNode::stateToString(NavigationState state) const
+{
+  switch (state) {
+    case NavigationState::IDLE: return "IDLE";
+    case NavigationState::LOADING_WAYPOINTS: return "LOADING";
+    case NavigationState::NAVIGATING: return "NAVIGATING";
+    case NavigationState::WAYPOINT_REACHED: return "WAYPOINT_REACHED";
+    case NavigationState::WAITING: return "WAITING";
+    case NavigationState::EXECUTING_COMMAND: return "EXECUTING_COMMAND";
+    case NavigationState::COMPLETED: return "COMPLETED";
+    case NavigationState::ERROR: return "ERROR";
+    default: return "UNKNOWN";
+  }
+}
+
+void WaypointFollowerNode::startNavigationCallback(
+  const std::shared_ptr<std_srvs::srv::Trigger::Request> /*request*/,
+  std::shared_ptr<std_srvs::srv::Trigger::Response> response)
+{
+  if (current_state_ == NavigationState::IDLE ||
+      current_state_ == NavigationState::COMPLETED ||
+      current_state_ == NavigationState::ERROR) {
+    waypoint_manager_->reset();
+    paused_ = false;
+    transitionToState(NavigationState::LOADING_WAYPOINTS);
+    response->success = true;
+    response->message = "Navigation started";
+  } else {
+    response->success = false;
+    response->message = "Navigation already running";
+  }
+}
+
+void WaypointFollowerNode::pauseNavigationCallback(
+  const std::shared_ptr<std_srvs::srv::Trigger::Request> /*request*/,
+  std::shared_ptr<std_srvs::srv::Trigger::Response> response)
+{
+  paused_ = true;
+  response->success = true;
+  response->message = "Navigation paused";
+}
+
+void WaypointFollowerNode::resumeNavigationCallback(
+  const std::shared_ptr<std_srvs::srv::Trigger::Request> /*request*/,
+  std::shared_ptr<std_srvs::srv::Trigger::Response> response)
+{
+  paused_ = false;
+  response->success = true;
+  response->message = "Navigation resumed";
+}
+
+void WaypointFollowerNode::skipWaypointCallback(
+  const std::shared_ptr<std_srvs::srv::Trigger::Request> /*request*/,
+  std::shared_ptr<std_srvs::srv::Trigger::Response> response)
+{
+  if (current_state_ == NavigationState::NAVIGATING) {
+    auto current_wp = waypoint_manager_->getCurrentWaypoint();
+    if (current_wp.has_value()) {
+      waypoint_manager_->skipCurrentWaypoint();
+      response->success = true;
+      response->message = "Skipped waypoint " + std::to_string(current_wp->id);
+      transitionToState(NavigationState::NAVIGATING);
+    } else {
+      response->success = false;
+      response->message = "No current waypoint to skip";
+    }
+  } else {
+    response->success = false;
+    response->message = "Not in navigating state";
+  }
+}
+
+}  // namespace raspicat_tvvf_navigation
