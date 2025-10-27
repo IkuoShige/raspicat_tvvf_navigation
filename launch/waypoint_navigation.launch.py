@@ -27,8 +27,6 @@ def generate_launch_description():
     use_sim_time = LaunchConfiguration('use_sim_time')
     map_file = LaunchConfiguration('map_file')
     rviz = LaunchConfiguration('rviz')
-    waypoint_csv = LaunchConfiguration('waypoint_csv')
-    auto_start = LaunchConfiguration('auto_start')
 
     # Configuration files
     map_scan_config = os.path.join(pkg_dir, 'config', 'map_scan_params.yaml')
@@ -41,7 +39,6 @@ def generate_launch_description():
 
     # Default files
     default_map_file = os.path.join(pkg_dir, 'maps', 'maps.yaml')
-    default_waypoint_csv = os.path.join(pkg_dir, 'maps', 'maps.csv')
 
     # Declare launch arguments
     declare_use_sim_time = DeclareLaunchArgument(
@@ -60,18 +57,6 @@ def generate_launch_description():
         'rviz',
         default_value='true',
         description='Launch RViz2 for visualization'
-    )
-
-    declare_waypoint_csv = DeclareLaunchArgument(
-        'waypoint_csv',
-        default_value=default_waypoint_csv,
-        description='Path to waypoint CSV file'
-    )
-
-    declare_auto_start = DeclareLaunchArgument(
-        'auto_start',
-        default_value='false',
-        description='Automatically start waypoint navigation on launch (true/false)'
     )
 
     # Lifecycle nodes for nav2_lifecycle_manager
@@ -152,13 +137,7 @@ def generate_launch_description():
                 executable='waypoint_follower_node',
                 name='waypoint_follower_node',
                 output='screen',
-                parameters=[
-                    waypoint_params,
-                    {
-                        'waypoint_csv_path': waypoint_csv,
-                        'auto_start': auto_start,
-                    }
-                ]
+                parameters=[waypoint_params]
             ),
 
             # 8. RViz2 - Visualization (optional)
@@ -179,8 +158,6 @@ def generate_launch_description():
         declare_use_sim_time,
         declare_map_file,
         declare_rviz,
-        declare_waypoint_csv,
-        declare_auto_start,
         # Launch navigation + waypoint nodes
         navigation_waypoint_nodes,
     ])
