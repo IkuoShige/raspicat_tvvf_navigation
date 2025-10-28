@@ -18,6 +18,8 @@ find_package(tf2_ros REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
+find_package(yaml-cpp REQUIRED)
+find_package(OpenCV REQUIRED)
 
 # Generate messages
 rosidl_generate_interfaces(${PROJECT_NAME}
@@ -59,9 +61,21 @@ ament_target_dependencies(waypoint_follower_node
 rosidl_get_typesupport_target(cpp_typesupport_target ${PROJECT_NAME} "rosidl_typesupport_cpp")
 target_link_libraries(waypoint_follower_node "${cpp_typesupport_target}")
 
+# Simple Map Server
+add_executable(simple_map_server
+  src/simple_map_server.cpp
+  src/simple_map_server_main.cpp
+)
+target_link_libraries(simple_map_server yaml-cpp::yaml-cpp ${OpenCV_LIBS})
+ament_target_dependencies(simple_map_server
+  rclcpp
+  nav_msgs
+)
+
 # Install targets
 install(TARGETS
   waypoint_follower_node
+  simple_map_server
   DESTINATION lib/${PROJECT_NAME}
 )
 

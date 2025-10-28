@@ -21,14 +21,14 @@
   <depend>tf2_geometry_msgs</depend>
   <depend>sensor_msgs</depend>
 
+  <depend>yaml-cpp</depend>
+
   <exec_depend>rosidl_default_runtime</exec_depend>
   <exec_depend>map_scan_manager</exec_depend>
   <exec_depend>emcl2</exec_depend>
   <exec_depend>obstacle_tracker</exec_depend>
   <exec_depend>tvvf_vo_c</exec_depend>
   <exec_depend>ros2_livox_simulation</exec_depend>
-  <exec_depend>nav2_map_server</exec_depend>
-  <exec_depend>nav2_lifecycle_manager</exec_depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>

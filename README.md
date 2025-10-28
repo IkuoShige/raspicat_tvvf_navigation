@@ -308,7 +308,7 @@ The launch file starts all necessary nodes:
 1. **map_scan_manager**: Converts 3D Livox point cloud to 2D laser scans
    - `scan/localization`: High-height scan (0.15m - 2.0m)
    - `scan`: Low-height scan (0.0m - 0.4m) for obstacles
-2. **nav2_map_server**: Publishes static map
+2. **simple_map_server**: Publishes static map (lightweight, no Nav2 dependency)
 3. **emcl2**: Monte Carlo localization
 4. **obstacle_tracker**: DBSCAN-based obstacle detection
 5. **tvvf_vo_c**: TVVF-based local planner (differential drive mode)
@@ -362,6 +362,7 @@ ros2 topic echo /waypoint_status
 ✅ **Unified Launch**: One launch file for complete system
 ✅ **Sim/Real Flexible**: Same launch works for both with `use_sim_time` parameter
 ✅ **Complete Independence**: No robomaster_s1 dependencies
+✅ **No Nav2 Dependency**: Lightweight custom map server, no Nav2 installation required
 ✅ **Differential Drive Support**: TVVF planner properly handles non-holonomic constraints
 ✅ **Livox Integration**: Full 3D LiDAR support with 2D scan generation
 ✅ **Easy Deployment**: Simple two-step process for simulation, one-step for real robot
@@ -409,8 +410,12 @@ ros2 topic echo /waypoint_status
 - map_scan_manager
 - emcl2
 - obstacle_tracker
-- nav2_map_server
-- nav2_lifecycle_manager
+
+### System Libraries
+- yaml-cpp (map YAML parsing) - `apt install libyaml-cpp-dev`
+- OpenCV (map image loading) - typically pre-installed
+
+**Note**: This package does NOT require Nav2 (nav2_map_server, nav2_lifecycle_manager). It uses a lightweight custom map server implementation.
 
 ## License
 

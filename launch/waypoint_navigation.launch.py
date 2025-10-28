@@ -74,9 +74,6 @@ def generate_launch_description():
         description='Automatically start waypoint navigation on launch (true/false)'
     )
 
-    # Lifecycle nodes for nav2_lifecycle_manager
-    lifecycle_nodes = ['map_server']
-
     # Navigation + Waypoint nodes group
     navigation_waypoint_nodes = GroupAction(
         actions=[
@@ -94,28 +91,19 @@ def generate_launch_description():
                 ]
             ),
 
-            # 2. nav2_map_server - Publish map for localization and planning
+            # 2. simple_map_server - Publish map for localization and planning
             Node(
-                package='nav2_map_server',
-                executable='map_server',
+                package='raspicat_tvvf_navigation',
+                executable='simple_map_server',
                 name='map_server',
                 output='screen',
-                parameters=[{'yaml_filename': map_file}]
+                parameters=[{
+                    'map_yaml_path': map_file,
+                    'use_sim_time': use_sim_time
+                }]
             ),
 
-            # 3. nav2_lifecycle_manager - Manage lifecycle nodes
-            Node(
-                package='nav2_lifecycle_manager',
-                executable='lifecycle_manager',
-                name='lifecycle_manager_localization',
-                output='screen',
-                parameters=[
-                    {'autostart': True},
-                    {'node_names': lifecycle_nodes}
-                ]
-            ),
-
-            # 4. emcl2 - Monte Carlo Localization with expansion resetting
+            # 3. emcl2 - Monte Carlo Localization with expansion resetting
             Node(
                 package='emcl2',
                 executable='emcl2_node',
@@ -127,7 +115,7 @@ def generate_launch_description():
                 ]
             ),
 
-            # 5. obstacle_tracker - Detect and track obstacles using DBSCAN
+            # 4. obstacle_tracker - Detect and track obstacles using DBSCAN
             Node(
                 package='obstacle_tracker',
                 executable='obstacle_tracker',
@@ -137,7 +125,7 @@ def generate_launch_description():
                 # Uses default 'scan' topic (low-height scan for obstacle detection)
             ),
 
-            # 6. tvvf_vo_cpp - Time-Varying Vector Field local planner
+            # 5. tvvf_vo_cpp - Time-Varying Vector Field local planner
             Node(
                 package='tvvf_vo_c',
                 executable='tvvf_vo_c_node',
@@ -146,7 +134,7 @@ def generate_launch_description():
                 parameters=[tvvf_vo_config]
             ),
 
-            # 7. Waypoint follower node
+            # 6. Waypoint follower node
             Node(
                 package='raspicat_tvvf_navigation',
                 executable='waypoint_follower_node',
@@ -161,7 +149,7 @@ def generate_launch_description():
                 ]
             ),
 
-            # 8. RViz2 - Visualization (optional)
+            # 7. RViz2 - Visualization (optional)
             Node(
                 package='rviz2',
                 executable='rviz2',
