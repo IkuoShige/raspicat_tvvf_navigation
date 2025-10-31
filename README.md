@@ -5,6 +5,16 @@ TVVF (Time-Varying Vector Field) based navigation and waypoint following system 
 ## Quick start: sim
 
 ```bash
+# colcon build
+cd ros2_ws/src/
+git clone https://github.com/IkuoShige/raspicat_tvvf_navigation.git -b feat/waypoint_function_without_nav2
+git clone https://github.com/CIT-Autonomous-Robot-Lab/raspicat_sim.git -b feat/livox-sim
+git clone https://github.com/IkuoShige/tvvf_vo_cpp.git -b feat/waypoint_navigation
+git clone https://github.com/IkuoShige/livox_laser_simulation_ros2.git
+git clone https://github.com/CIT-Autonomous-Robot-Lab/map_scan_manager.git
+git clone ttps://github.com/cafeline/obstacle_tracker.git
+git clone https://github.com/CIT-Autonomous-Robot-Lab/emcl2_ros2.git
+cd ../ && colcon build --packages-up-to raspicat_tvvf_navigation --symlink-install
 # Terminal 1: Launch Gazebo
 ros2 launch raspicat_gazebo raspicat_gazebo_livox.launch.py
 
@@ -23,9 +33,9 @@ ros2 service call /start_waypoint_navigation std_srvs/srv/Trigger
 ## Overview
 
 This package provides a **unified, self-contained navigation solution** for the Raspicat robot using:
-- **Livox MID-360** 3D LiDAR sensor
-- **TVVF-based local planner** (tvvf_vo_c) with differential drive support
-- **Complete navigation stack**: map_scan_manager, emcl2, obstacle_tracker
+- **Livox MID-360** 3D LiDAR sensor (sim: [livox_laser_simulation_ros2](https://github.com/IkuoShige/livox_laser_simulation_ros2))
+- **TVVF-based local planner** ([tvvf_vo_cpp](https://github.com/IkuoShige/tvvf_vo_cpp/tree/feat/waypoint_navigation)) with differential drive support
+- **Complete navigation stack**: [map_scan_manager](https://github.com/CIT-Autonomous-Robot-Lab/map_scan_manager), [emcl2](https://github.com/CIT-Autonomous-Robot-Lab/emcl2_ros2), [obstacle_tracker](https://github.com/cafeline/obstacle_tracker)
 - **Waypoint follower**: Autonomous waypoint navigation with advanced command support
 - **Centralized configuration**: All parameters managed through YAML files
 - **Waypoint editor integration**: Compatible with [waypoint_editor](https://github.com/kzm784/waypoint_editor) for easy waypoint creation
