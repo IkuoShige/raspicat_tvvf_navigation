@@ -1,0 +1,11 @@
+<library path="raspicat_navigation_panel">
+  <class name="raspicat_tvvf_navigation/RaspicatNavigationPanel"
+         type="raspicat_tvvf_navigation::RaspicatNavigationPanel"
+         base_class_type="rviz_common::Panel">
+    <description>
+      Control panel for Raspicat TVVF Navigation.
+      Provides waypoint navigation control (start/pause/resume/skip),
+      real-time status display, waypoint list management, and navigation logs.
+    </description>
+  </class>
+</library>

@@ -20,6 +20,9 @@ find_package(sensor_msgs REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 find_package(yaml-cpp REQUIRED)
 find_package(OpenCV REQUIRED)
+find_package(pluginlib REQUIRED)
+find_package(rviz_common REQUIRED)
+find_package(Qt5 REQUIRED COMPONENTS Widgets)
 
 # Generate messages
 rosidl_generate_interfaces(${PROJECT_NAME}
@@ -29,6 +32,42 @@ rosidl_generate_interfaces(${PROJECT_NAME}
 
 # Include directories
 include_directories(include)
+
+# Qt5 MOC setup for RViz plugin
+set(CMAKE_AUTOMOC ON)
+set(panel_headers
+  include/raspicat_tvvf_navigation/raspicat_navigation_panel.hpp
+)
+qt5_wrap_cpp(panel_moc ${panel_headers})
+
+# RViz Plugin library
+add_library(raspicat_navigation_panel SHARED
+  src/raspicat_navigation_panel.cpp
+  ${panel_moc}
+)
+
+target_include_directories(raspicat_navigation_panel PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include/${PROJECT_NAME}>
+)
+
+target_link_libraries(raspicat_navigation_panel
+  Qt5::Widgets
+)
+
+ament_target_dependencies(raspicat_navigation_panel
+  rclcpp
+  rviz_common
+  pluginlib
+  std_srvs
+)
+
+# Link against generated message library for the panel
+rosidl_get_typesupport_target(cpp_typesupport_target_panel ${PROJECT_NAME} "rosidl_typesupport_cpp")
+target_link_libraries(raspicat_navigation_panel "${cpp_typesupport_target_panel}")
+
+# Export plugin description
+pluginlib_export_plugin_description_file(rviz_common plugin_description.xml)
 
 # CSV Reader library
 add_library(csv_reader src/csv_reader.cpp)
@@ -79,6 +118,21 @@ install(TARGETS
   DESTINATION lib/${PROJECT_NAME}
 )
 
+# Install RViz plugin library
+install(TARGETS
+  raspicat_navigation_panel
+  EXPORT raspicat_navigation_panel_targets
+  ARCHIVE DESTINATION lib
+  LIBRARY DESTINATION lib
+  RUNTIME DESTINATION bin
+)
+
+# Install plugin description
+install(FILES
+  plugin_description.xml
+  DESTINATION share/${PROJECT_NAME}
+)
+
 # Install libraries
 install(TARGETS
   csv_reader
@@ -113,6 +167,12 @@ install(DIRECTORY
   DESTINATION share/${PROJECT_NAME}/
 )
 
+# Install documentation
+install(DIRECTORY
+  docs
+  DESTINATION share/${PROJECT_NAME}/
+)
+
 # Install header files
 install(DIRECTORY
   include/
@@ -144,6 +204,8 @@ ament_export_dependencies(
   tf2_ros
   tf2_geometry_msgs
   sensor_msgs
+  pluginlib
+  rviz_common
 )
 
 ament_package()

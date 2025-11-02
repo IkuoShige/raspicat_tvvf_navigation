@@ -22,8 +22,11 @@
   <depend>sensor_msgs</depend>
 
   <depend>yaml-cpp</depend>
+  <depend>pluginlib</depend>
+  <depend>rviz_common</depend>
 
   <exec_depend>rosidl_default_runtime</exec_depend>
+  <exec_depend>rviz2</exec_depend>
   <exec_depend>map_scan_manager</exec_depend>
   <exec_depend>emcl2</exec_depend>
   <exec_depend>obstacle_tracker</exec_depend>

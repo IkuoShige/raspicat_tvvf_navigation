@@ -14,7 +14,7 @@ waypoint_follower_node:
     goal_timeout: 30.0  # seconds
 
     # Behavior settings
-    auto_start: true  # Automatically start navigation on node launch (true/false)
+    auto_start: false  # Automatically start navigation on node launch (true/false)
     enable_skip_on_timeout: true  # Skip waypoint after max retries
     loop_navigation: false  # Stop after completing all waypoints
 

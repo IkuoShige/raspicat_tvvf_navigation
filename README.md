@@ -105,7 +105,40 @@ ros2 launch raspicat_tvvf_navigation waypoint_navigation.launch.py use_sim_time:
 
 ## Waypoint Navigation Control
 
-### Available Services
+### RViz GUI Control Panel (推奨)
+
+**RaspicatNavigationPanel**は、RViz2上でナビゲーションを直感的に操作するためのGUIパネルです。
+
+#### 主な機能
+- ✅ **Start/Pause/Resume/Skipボタン** - ワンクリックで操作
+- ✅ **リアルタイム状態表示** - 進捗、距離、方向差を視覚化
+- ✅ **色分けされた状態インジケータ** - IDLE/NAVIGATING/WAITING/COMPLETED/ERROR
+- ✅ **ログ表示** - タイムスタンプ付き操作履歴
+- ✅ **進捗バー** - ウェイポイント完了率を表示
+
+#### 使用方法
+
+1. **RViz2を起動**（launch fileで自動起動、または手動で `rviz2`）
+2. **パネルを追加**: `Panels` → `Add New Panel` → `raspicat_tvvf_navigation/RaspicatNavigationPanel`
+3. **ボタンで操作**:
+   - **Start**: ナビゲーション開始
+   - **Pause**: 一時停止
+   - **Resume**: 再開
+   - **Skip Current**: 現在のウェイポイントをスキップ
+
+#### 状態の色分け
+- **IDLE** (青): 待機中
+- **NAVIGATING** (緑): 移動中
+- **WAITING** (オレンジ): 待機中（pause/wait）
+- **COMPLETED** (濃緑): 完了
+- **ERROR** (赤): エラー
+
+📖 **詳細ドキュメント**: [docs/rviz_panel.md](docs/rviz_panel.md)
+🚀 **クイックスタート**: [docs/quick_start_rviz_panel.md](docs/quick_start_rviz_panel.md)
+
+### コマンドラインでの制御
+
+GUIパネルの代わりに、コマンドラインでサービスを直接呼び出すこともできます。
 
 #### Start/Stop/Control Services
 ```bash
@@ -291,8 +324,13 @@ raspicat_tvvf_navigation/
 │   ├── csv_reader.cpp
 │   ├── waypoint_manager.cpp
 │   ├── waypoint_follower_node.cpp
-│   └── waypoint_follower_main.cpp
+│   ├── waypoint_follower_main.cpp
+│   ├── simple_map_server.cpp
+│   ├── simple_map_server_main.cpp
+│   └── raspicat_navigation_panel.cpp    # RViz panel plugin
 ├── include/                  # Header files
+│   └── raspicat_tvvf_navigation/
+│       └── raspicat_navigation_panel.hpp
 ├── msg/                      # Custom messages
 │   └── WaypointStatus.msg
 ├── launch/                   # Launch file
@@ -308,7 +346,10 @@ raspicat_tvvf_navigation/
 │   ├── maps.yaml
 │   ├── maps.pgm
 │   └── maps.csv
-└── rviz/                     # RViz configuration
+├── rviz/                     # RViz configuration
+├── docs/                     # Documentation
+│   └── rviz_panel.md                    # RViz panel documentation
+└── plugin_description.xml    # RViz plugin registration
 ```
 
 ## Navigation Stack Components
@@ -379,6 +420,7 @@ ros2 topic echo /waypoint_status
 ✅ **Centralized YAML Configuration**: All waypoint and behavior parameters in one config file
 ✅ **Waypoint Editor Integration**: Compatible with [waypoint_editor](https://github.com/kzm784/waypoint_editor) GUI tool
 ✅ **Advanced Waypoint Commands**: Support for timed waits, manual pauses, and topic-based triggers
+✅ **RViz GUI Control Panel**: Intuitive RViz plugin for navigation control with real-time status display
 
 ## Example Workflow
 
@@ -420,6 +462,12 @@ ros2 topic echo /waypoint_status
 - map_scan_manager
 - emcl2
 - obstacle_tracker
+
+### RViz Plugin
+- rviz2 (RViz2 visualization tool)
+- rviz_common (RViz plugin base classes)
+- pluginlib (ROS 2 plugin loading)
+- Qt5 Widgets (GUI framework) - typically pre-installed with ROS 2
 
 ### System Libraries
 - yaml-cpp (map YAML parsing) - `apt install libyaml-cpp-dev`
