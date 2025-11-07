@@ -66,7 +66,7 @@ add_executable(simple_map_server
   src/simple_map_server.cpp
   src/simple_map_server_main.cpp
 )
-target_link_libraries(simple_map_server yaml-cpp::yaml-cpp ${OpenCV_LIBS})
+target_link_libraries(simple_map_server yaml-cpp ${OpenCV_LIBS})
 ament_target_dependencies(simple_map_server
   rclcpp
   nav_msgs

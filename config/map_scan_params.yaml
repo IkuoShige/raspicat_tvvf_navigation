@@ -1,7 +1,7 @@
 /**:
   ros__parameters:
     # Scan conversion parameters
-    scan_frame_id: "livox"  # LiDAR frame ID for Raspicat
+    scan_frame_id: "lidar_link"  # LiDAR frame ID for Raspicat
     scan_angle_increment_factor: 10  # Angle increment factor
     scan_range_min: 0.1  # Minimum scan range (m)
     scan_range_max: 100.0  # Maximum scan range (m)
