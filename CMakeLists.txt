@@ -89,29 +89,20 @@ install(TARGETS
   RUNTIME DESTINATION bin
 )
 
-# Install launch files
-install(DIRECTORY
+# Install share resources (also mirror to merged layout for runtime parameter files)
+set(_share_resource_dirs
   launch
-  DESTINATION share/${PROJECT_NAME}/
-)
-
-# Install config files
-install(DIRECTORY
   config
-  DESTINATION share/${PROJECT_NAME}/
-)
-
-# Install map files
-install(DIRECTORY
   maps
-  DESTINATION share/${PROJECT_NAME}/
+  rviz
 )
 
-# Install rviz files
-install(DIRECTORY
-  rviz
-  DESTINATION share/${PROJECT_NAME}/
-)
+foreach(dir ${_share_resource_dirs})
+  install(DIRECTORY ${dir}
+    DESTINATION share/${PROJECT_NAME})
+  install(DIRECTORY ${dir}
+    DESTINATION ../share/${PROJECT_NAME})
+endforeach()
 
 # Install header files
 install(DIRECTORY
