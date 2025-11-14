@@ -413,7 +413,6 @@ ros2 topic echo /waypoint_status
 - ROS 2 Humble
 - raspicat_description (robot URDF)
 - raspicat_gazebo (simulation only)
-- ros2_livox_simulation (simulation only)
 
 ### Navigation Stack
 - tvvf_vo_c
