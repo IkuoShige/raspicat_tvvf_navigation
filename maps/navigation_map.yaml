@@ -1,0 +1,6 @@
+image: navigation_map.pgm
+resolution: 0.2
+origin: [-132.10333251953125, -330.49822998046875, 0.0]
+occupied_thresh: 0.65
+free_thresh: 0.2
+negate: 0
