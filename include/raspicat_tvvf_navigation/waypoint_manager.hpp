@@ -12,7 +12,10 @@ namespace raspicat_tvvf_navigation
 class WaypointManager
 {
 public:
-  WaypointManager(double position_tolerance, double orientation_tolerance);
+  WaypointManager(double position_tolerance_strict,
+                  double orientation_tolerance_strict,
+                  double position_tolerance_loose,
+                  double orientation_tolerance_loose);
 
   /**
    * @brief Load waypoints from CSV file
@@ -97,8 +100,10 @@ public:
 private:
   std::vector<Waypoint> waypoints_;
   size_t current_index_;
-  double position_tolerance_;
-  double orientation_tolerance_;
+  double position_tolerance_strict_;
+  double orientation_tolerance_strict_;
+  double position_tolerance_loose_;
+  double orientation_tolerance_loose_;
 
   double calculateDistance(const geometry_msgs::msg::Pose& p1,
                           const geometry_msgs::msg::Pose& p2) const;

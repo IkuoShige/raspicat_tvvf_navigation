@@ -43,6 +43,7 @@ ament_target_dependencies(waypoint_manager rclcpp geometry_msgs tf2 tf2_ros tf2_
 add_executable(waypoint_follower_node
   src/waypoint_follower_node.cpp
   src/waypoint_follower_main.cpp
+  src/tolerance_config.cpp
 )
 target_link_libraries(waypoint_follower_node waypoint_manager csv_reader)
 ament_target_dependencies(waypoint_follower_node
@@ -112,6 +113,7 @@ install(DIRECTORY
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
+  find_package(ament_cmake_gtest REQUIRED)
   # the following line skips the linter which checks for copyrights
   # comment the line when a copyright and license is added to all source files
   set(ament_cmake_copyright_FOUND TRUE)
@@ -120,6 +122,23 @@ if(BUILD_TESTING)
   # a copyright and license is added to all source files
   set(ament_cmake_cpplint_FOUND TRUE)
   ament_lint_auto_find_test_dependencies()
+
+  ament_add_gtest(test_waypoint_tolerance
+    test/test_waypoint_tolerance.cpp
+  )
+  target_link_libraries(test_waypoint_tolerance waypoint_manager csv_reader)
+  ament_target_dependencies(test_waypoint_tolerance
+    rclcpp
+    geometry_msgs
+    tf2
+    tf2_ros
+    tf2_geometry_msgs
+  )
+
+  ament_add_gtest(test_tolerance_config
+    test/test_tolerance_config.cpp
+    src/tolerance_config.cpp
+  )
 endif()
 
 # Export targets

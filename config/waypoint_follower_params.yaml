@@ -5,9 +5,11 @@ waypoint_follower_node:
     # Launch files will override this with proper package path resolution
     waypoint_csv_path: "/home/ryo/ros2_ws/src/raspicat_tvvf_navigation/maps/tsudanuma_WP.csv"
 
-    # Waypoint tolerance
-    position_tolerance: 0.5  # meters
-    orientation_tolerance: 3.14  # radians
+    # Waypoint tolerance (strict = default, loose = command \"loose\")
+    position_tolerance_strict: 0.3  # meters
+    orientation_tolerance_strict: 0.3  # radians
+    position_tolerance_loose: 0.5  # meters
+    orientation_tolerance_loose: 3.14  # radians
 
     # Retry and timeout settings
     max_retry_count: 3

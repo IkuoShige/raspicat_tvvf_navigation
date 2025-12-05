@@ -13,6 +13,7 @@
 
 #include "raspicat_tvvf_navigation/waypoint_manager.hpp"
 #include "raspicat_tvvf_navigation/msg/waypoint_status.hpp"
+#include "raspicat_tvvf_navigation/tolerance_config.hpp"
 
 namespace raspicat_tvvf_navigation
 {
@@ -123,8 +124,10 @@ private:
 
   // Parameters
   std::string waypoint_csv_path_;
-  double position_tolerance_;
-  double orientation_tolerance_;
+  double position_tolerance_strict_;
+  double orientation_tolerance_strict_;
+  double position_tolerance_loose_;
+  double orientation_tolerance_loose_;
   int max_retry_count_;
   double goal_timeout_;
   bool auto_start_;

@@ -17,8 +17,13 @@ WaypointFollowerNode::WaypointFollowerNode()
 {
   // Declare parameters
   this->declare_parameter("waypoint_csv_path", "");
-  this->declare_parameter("position_tolerance", 0.3);
-  this->declare_parameter("orientation_tolerance", 0.3);
+  this->declare_parameter("position_tolerance_strict", 0.3);
+  this->declare_parameter("orientation_tolerance_strict", 0.3);
+  this->declare_parameter("position_tolerance_loose", 0.5);
+  this->declare_parameter("orientation_tolerance_loose", 3.14);
+  // レガシー互換用（旧パラメータ名）
+  this->declare_parameter("position_tolerance", -1.0);
+  this->declare_parameter("orientation_tolerance", -1.0);
   this->declare_parameter("max_retry_count", 3);
   this->declare_parameter("goal_timeout", 30.0);
   this->declare_parameter("auto_start", false);
@@ -29,8 +34,24 @@ WaypointFollowerNode::WaypointFollowerNode()
 
   // Get parameters
   waypoint_csv_path_ = this->get_parameter("waypoint_csv_path").as_string();
-  position_tolerance_ = this->get_parameter("position_tolerance").as_double();
-  orientation_tolerance_ = this->get_parameter("orientation_tolerance").as_double();
+  position_tolerance_strict_ = this->get_parameter("position_tolerance_strict").as_double();
+  orientation_tolerance_strict_ = this->get_parameter("orientation_tolerance_strict").as_double();
+  position_tolerance_loose_ = this->get_parameter("position_tolerance_loose").as_double();
+  orientation_tolerance_loose_ = this->get_parameter("orientation_tolerance_loose").as_double();
+  const double legacy_position_tolerance = this->get_parameter("position_tolerance").as_double();
+  const double legacy_orientation_tolerance = this->get_parameter("orientation_tolerance").as_double();
+
+  {
+    ToleranceConfig raw{position_tolerance_strict_, orientation_tolerance_strict_,
+                        position_tolerance_loose_, orientation_tolerance_loose_};
+    ToleranceConfig defaults{0.3, 0.3, 0.5, 3.14};
+    auto resolved = resolve_tolerance_config(
+      raw, defaults, legacy_position_tolerance, legacy_orientation_tolerance);
+    position_tolerance_strict_ = resolved.position_strict;
+    orientation_tolerance_strict_ = resolved.orientation_strict;
+    position_tolerance_loose_ = resolved.position_loose;
+    orientation_tolerance_loose_ = resolved.orientation_loose;
+  }
   max_retry_count_ = this->get_parameter("max_retry_count").as_int();
   goal_timeout_ = this->get_parameter("goal_timeout").as_double();
   auto_start_ = this->get_parameter("auto_start").as_bool();
@@ -41,7 +62,10 @@ WaypointFollowerNode::WaypointFollowerNode()
 
   // Create waypoint manager
   waypoint_manager_ = std::make_unique<WaypointManager>(
-    position_tolerance_, orientation_tolerance_);
+    position_tolerance_strict_,
+    orientation_tolerance_strict_,
+    position_tolerance_loose_,
+    orientation_tolerance_loose_);
 
   // TF
   tf_buffer_ = std::make_shared<tf2_ros::Buffer>(this->get_clock());
@@ -257,8 +281,11 @@ void WaypointFollowerNode::handleWaypointReachedState()
 
   RCLCPP_INFO(this->get_logger(), "Reached waypoint %d", current_wp->id);
 
-  // Execute command if present
-  if (!current_wp->command.empty()) {
+  const bool command_loose = (current_wp->command == "loose");
+  const bool has_command = !current_wp->command.empty() && !command_loose;
+
+  // Execute command if present (loose は通常コマンド扱いせず即到達とみなす)
+  if (has_command) {
     // Do NOT mark as reached here - it will be marked when command completes
     executeWaypointCommand(current_wp->command);
   } else {

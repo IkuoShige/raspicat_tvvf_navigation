@@ -6,10 +6,15 @@
 namespace raspicat_tvvf_navigation
 {
 
-WaypointManager::WaypointManager(double position_tolerance, double orientation_tolerance)
+WaypointManager::WaypointManager(double position_tolerance_strict,
+                                 double orientation_tolerance_strict,
+                                 double position_tolerance_loose,
+                                 double orientation_tolerance_loose)
 : current_index_(0),
-  position_tolerance_(position_tolerance),
-  orientation_tolerance_(orientation_tolerance)
+  position_tolerance_strict_(position_tolerance_strict),
+  orientation_tolerance_strict_(orientation_tolerance_strict),
+  position_tolerance_loose_(position_tolerance_loose),
+  orientation_tolerance_loose_(orientation_tolerance_loose)
 {
 }
 
@@ -44,8 +49,16 @@ bool WaypointManager::isWaypointReached(const geometry_msgs::msg::Pose& current_
   double distance = calculateDistance(current_pose, wp->pose);
   double yaw_diff = calculateYawDiff(current_pose, wp->pose);
 
-  bool position_reached = distance < position_tolerance_;
-  bool orientation_reached = std::abs(yaw_diff) < orientation_tolerance_;
+  const bool use_loose_tolerance = (wp->command == "loose");
+  const double pos_tol = use_loose_tolerance
+      ? position_tolerance_loose_
+      : position_tolerance_strict_;
+  const double ori_tol = use_loose_tolerance
+      ? orientation_tolerance_loose_
+      : orientation_tolerance_strict_;
+
+  bool position_reached = distance < pos_tol;
+  bool orientation_reached = std::abs(yaw_diff) < ori_tol;
 
   return position_reached && orientation_reached;
 }
