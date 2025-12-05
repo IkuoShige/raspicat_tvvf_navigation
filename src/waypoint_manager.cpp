@@ -49,13 +49,13 @@ bool WaypointManager::isWaypointReached(const geometry_msgs::msg::Pose& current_
   double distance = calculateDistance(current_pose, wp->pose);
   double yaw_diff = calculateYawDiff(current_pose, wp->pose);
 
-  const bool use_loose_tolerance = (wp->command == "loose");
-  const double pos_tol = use_loose_tolerance
-      ? position_tolerance_loose_
-      : position_tolerance_strict_;
-  const double ori_tol = use_loose_tolerance
-      ? orientation_tolerance_loose_
-      : orientation_tolerance_strict_;
+  const bool use_strict_tolerance = (wp->command == "strict");
+  const double pos_tol = use_strict_tolerance
+      ? position_tolerance_strict_
+      : position_tolerance_loose_;
+  const double ori_tol = use_strict_tolerance
+      ? orientation_tolerance_strict_
+      : orientation_tolerance_loose_;
 
   bool position_reached = distance < pos_tol;
   bool orientation_reached = std::abs(yaw_diff) < ori_tol;

@@ -281,10 +281,9 @@ void WaypointFollowerNode::handleWaypointReachedState()
 
   RCLCPP_INFO(this->get_logger(), "Reached waypoint %d", current_wp->id);
 
-  const bool command_loose = (current_wp->command == "loose");
-  const bool has_command = !current_wp->command.empty() && !command_loose;
+  const bool has_command = is_action_command(current_wp->command);
 
-  // Execute command if present (loose は通常コマンド扱いせず即到達とみなす)
+  // Execute command if present (strict/loose/空は通常コマンド扱いせず即到達とみなす)
   if (has_command) {
     // Do NOT mark as reached here - it will be marked when command completes
     executeWaypointCommand(current_wp->command);

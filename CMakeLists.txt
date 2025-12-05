@@ -43,6 +43,7 @@ ament_target_dependencies(waypoint_manager rclcpp geometry_msgs tf2 tf2_ros tf2_
 add_executable(waypoint_follower_node
   src/waypoint_follower_node.cpp
   src/waypoint_follower_main.cpp
+  src/command_utils.cpp
   src/tolerance_config.cpp
 )
 target_link_libraries(waypoint_follower_node waypoint_manager csv_reader)
@@ -138,6 +139,11 @@ if(BUILD_TESTING)
   ament_add_gtest(test_tolerance_config
     test/test_tolerance_config.cpp
     src/tolerance_config.cpp
+  )
+
+  ament_add_gtest(test_command_utils
+    test/test_command_utils.cpp
+    src/command_utils.cpp
   )
 endif()
 

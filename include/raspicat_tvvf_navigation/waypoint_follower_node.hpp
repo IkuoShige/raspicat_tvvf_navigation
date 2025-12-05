@@ -14,6 +14,7 @@
 #include "raspicat_tvvf_navigation/waypoint_manager.hpp"
 #include "raspicat_tvvf_navigation/msg/waypoint_status.hpp"
 #include "raspicat_tvvf_navigation/tolerance_config.hpp"
+#include "raspicat_tvvf_navigation/command_utils.hpp"
 
 namespace raspicat_tvvf_navigation
 {
