@@ -75,6 +75,36 @@ std::string writeTestCsv() {
   return path.string();
 }
 
+std::string writeSingleCommandCsv(const std::string& command) {
+  const std::string header = "id,pose_x,pose_y,pose_z,rot_x,rot_y,rot_z,rot_w,command";
+
+  Waypoint wp;
+  wp.id = 0;
+  wp.pose = createPose(0.0, 0.0, 0.0);
+  wp.command = command;
+
+  auto to_line = [](const Waypoint& wp) {
+    std::ostringstream ss;
+    ss << wp.id << ","
+       << wp.pose.position.x << ","
+       << wp.pose.position.y << ","
+       << wp.pose.position.z << ","
+       << wp.pose.orientation.x << ","
+       << wp.pose.orientation.y << ","
+       << wp.pose.orientation.z << ","
+       << wp.pose.orientation.w << ","
+       << wp.command;
+    return ss.str();
+  };
+
+  std::filesystem::path path = std::filesystem::temp_directory_path() / "single_command_wp.csv";
+  std::ofstream ofs(path);
+  ofs << header << "\n";
+  ofs << to_line(wp) << "\n";
+  ofs.close();
+  return path.string();
+}
+
 }  // namespace
 
 TEST(WaypointToleranceTest, LooseToleranceAppliesByDefault) {
@@ -121,4 +151,53 @@ TEST(WaypointToleranceTest, NonStrictCommandKeepsLooseTolerance) {
 
   auto pose_loose_ok = createPose(0.45, 0.0, 0.0);
   EXPECT_TRUE(mgr.isWaypointReached(pose_loose_ok));
+}
+
+TEST(WaypointToleranceTest, StrictPauseUsesStrictTolerance) {
+  const std::string csv_path = writeSingleCommandCsv("strict pause");
+  WaypointManager mgr(/*position_tolerance_strict=*/0.2,
+                      /*orientation_tolerance_strict=*/0.2,
+                      /*position_tolerance_loose=*/0.5,
+                      /*orientation_tolerance_loose=*/1.0);
+  ASSERT_TRUE(mgr.loadWaypoints(csv_path));
+
+  auto pose_within_strict = createPose(0.15, 0.0, 0.1);
+  EXPECT_TRUE(mgr.isWaypointReached(pose_within_strict));
+
+  auto pose_outside_strict = createPose(0.25, 0.0, 0.25);
+  EXPECT_FALSE(mgr.isWaypointReached(pose_outside_strict));
+
+  // しきい値ちょうどでも到達扱いにする（境界Inclusive）
+  auto pose_on_boundary = createPose(0.2, 0.0, 0.2);
+  EXPECT_TRUE(mgr.isWaypointReached(pose_on_boundary));
+}
+
+TEST(WaypointToleranceTest, StrictPrefixAppliesToOtherCommands) {
+  const std::string csv_path = writeSingleCommandCsv("strict wait:3");
+  WaypointManager mgr(/*position_tolerance_strict=*/0.25,
+                      /*orientation_tolerance_strict=*/0.25,
+                      /*position_tolerance_loose=*/0.6,
+                      /*orientation_tolerance_loose=*/1.2);
+  ASSERT_TRUE(mgr.loadWaypoints(csv_path));
+
+  auto pose_within_strict = createPose(0.2, 0.0, 0.2);
+  EXPECT_TRUE(mgr.isWaypointReached(pose_within_strict));
+
+  auto pose_outside_strict = createPose(0.35, 0.0, 0.3);
+  EXPECT_FALSE(mgr.isWaypointReached(pose_outside_strict));
+}
+
+TEST(WaypointToleranceTest, LoosePrefixKeepsLooseTolerance) {
+  const std::string csv_path = writeSingleCommandCsv("loose pause");
+  WaypointManager mgr(/*position_tolerance_strict=*/0.2,
+                      /*orientation_tolerance_strict=*/0.2,
+                      /*position_tolerance_loose=*/0.5,
+                      /*orientation_tolerance_loose=*/1.0);
+  ASSERT_TRUE(mgr.loadWaypoints(csv_path));
+
+  auto pose_within_loose = createPose(0.35, 0.0, 0.8);
+  EXPECT_TRUE(mgr.isWaypointReached(pose_within_loose));
+
+  auto pose_outside_loose = createPose(0.55, 0.0, 0.5);
+  EXPECT_FALSE(mgr.isWaypointReached(pose_outside_loose));
 }

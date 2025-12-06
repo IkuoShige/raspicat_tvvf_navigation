@@ -136,6 +136,8 @@ void WaypointFollowerNode::controlLoop()
     return;
   }
 
+  const auto robot_pose = getRobotPose();
+
   switch (current_state_) {
     case NavigationState::IDLE:
       handleIdleState();
@@ -144,7 +146,7 @@ void WaypointFollowerNode::controlLoop()
       handleLoadingState();
       break;
     case NavigationState::NAVIGATING:
-      handleNavigatingState();
+      handleNavigatingState(robot_pose);
       break;
     case NavigationState::WAYPOINT_REACHED:
       handleWaypointReachedState();
@@ -174,7 +176,6 @@ void WaypointFollowerNode::controlLoop()
     status_msg.current_waypoint_id = current_wp->id;
     status_msg.current_command = current_wp->command;
 
-    auto robot_pose = getRobotPose();
     if (robot_pose.has_value()) {
       status_msg.distance_to_goal = waypoint_manager_->getDistanceToWaypoint(*robot_pose);
       status_msg.orientation_diff = waypoint_manager_->getOrientationDiff(*robot_pose);
@@ -210,7 +211,7 @@ void WaypointFollowerNode::handleLoadingState()
   }
 }
 
-void WaypointFollowerNode::handleNavigatingState()
+void WaypointFollowerNode::handleNavigatingState(const std::optional<geometry_msgs::msg::Pose>& robot_pose)
 {
   auto current_wp = waypoint_manager_->getCurrentWaypoint();
 
@@ -220,7 +221,6 @@ void WaypointFollowerNode::handleNavigatingState()
     return;
   }
 
-  auto robot_pose = getRobotPose();
   if (!robot_pose.has_value()) {
     RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
                          "Cannot get robot pose");
@@ -381,22 +381,25 @@ void WaypointFollowerNode::executeWaypointCommand(const std::string& command)
 {
   RCLCPP_INFO(this->get_logger(), "Executing command: %s", command.c_str());
 
-  if (command == "continue" || command.empty()) {
+  const auto parsed = parse_command(command);
+  const std::string& action = parsed.action_command;
+
+  if (action == "continue" || action.empty()) {
     if (waypoint_manager_->isCompleted()) {
       transitionToState(NavigationState::COMPLETED);
     } else {
       transitionToState(NavigationState::NAVIGATING);
     }
   }
-  else if (command == "pause" || command == "stop") {
+  else if (action == "pause" || action == "stop") {
     RCLCPP_INFO(this->get_logger(), "Pause command - waiting for manual resume");
     wait_reason_ = WaitReason::PAUSE;
     paused_ = true;
     transitionToState(NavigationState::WAITING);
   }
-  else if (command.substr(0, 5) == "wait:") {
+  else if (action.rfind("wait:", 0) == 0) {
     double wait_seconds;
-    if (parseWaitCommand(command, wait_seconds)) {
+    if (parseWaitCommand(action, wait_seconds)) {
       RCLCPP_INFO(this->get_logger(), "Waiting for %.1f seconds", wait_seconds);
       wait_reason_ = WaitReason::TIME;
       wait_start_time_ = this->now();
@@ -407,9 +410,9 @@ void WaypointFollowerNode::executeWaypointCommand(const std::string& command)
       transitionToState(NavigationState::NAVIGATING);
     }
   }
-  else if (command.substr(0, 11) == "wait_topic:") {
+  else if (action.rfind("wait_topic:", 0) == 0) {
     std::string topic_name;
-    if (parseWaitTopicCommand(command, topic_name)) {
+    if (parseWaitTopicCommand(action, topic_name)) {
       RCLCPP_INFO(this->get_logger(), "Waiting for topic: %s", topic_name.c_str());
       wait_reason_ = WaitReason::TOPIC;
       wait_topic_name_ = topic_name;
@@ -426,7 +429,7 @@ void WaypointFollowerNode::executeWaypointCommand(const std::string& command)
       transitionToState(NavigationState::NAVIGATING);
     }
   }
-  else if (command == "skip_if_fail") {
+  else if (action == "skip_if_fail") {
     // This is handled in the navigation timeout logic
     if (waypoint_manager_->isCompleted()) {
       transitionToState(NavigationState::COMPLETED);

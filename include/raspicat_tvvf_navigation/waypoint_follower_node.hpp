@@ -50,13 +50,10 @@ private:
   void transitionToState(NavigationState new_state);
   std::string stateToString(NavigationState state) const;
 
-  // Main control loop
-  void controlLoop();
-
   // State handlers
   void handleIdleState();
   void handleLoadingState();
-  void handleNavigatingState();
+  void handleNavigatingState(const std::optional<geometry_msgs::msg::Pose>& robot_pose);
   void handleWaypointReachedState();
   void handleWaitingState();
   void handleExecutingCommandState();
@@ -78,9 +75,6 @@ private:
   void publishWaypointMarkers();
   visualization_msgs::msg::Marker createWaypointMarker(
     const Waypoint& wp, int index, bool is_current, bool is_reached, bool is_skipped);
-
-  // TF utilities
-  std::optional<geometry_msgs::msg::Pose> getRobotPose();
 
   // Service callbacks
   void startNavigationCallback(
@@ -146,6 +140,19 @@ private:
   std::string wait_topic_name_;
   bool wait_topic_received_;
   std::string error_message_;
+
+protected:
+  // Testing helpers
+  bool loadWaypointsForTest(const std::string& path) { return waypoint_manager_->loadWaypoints(path); }
+  void setStateForTest(NavigationState state) { current_state_ = state; }
+  NavigationState getStateForTest() const { return current_state_; }
+  void markReachedForTest() { waypoint_manager_->markCurrentReached(); }
+
+  // Main control loop
+  void controlLoop();
+
+  // TF utilities (protected for tests)
+  virtual std::optional<geometry_msgs::msg::Pose> getRobotPose();
 };
 
 }  // namespace raspicat_tvvf_navigation

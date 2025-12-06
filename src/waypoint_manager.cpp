@@ -2,6 +2,7 @@
 #include <cmath>
 #include <rclcpp/rclcpp.hpp>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
+#include "raspicat_tvvf_navigation/command_utils.hpp"
 
 namespace raspicat_tvvf_navigation
 {
@@ -49,7 +50,8 @@ bool WaypointManager::isWaypointReached(const geometry_msgs::msg::Pose& current_
   double distance = calculateDistance(current_pose, wp->pose);
   double yaw_diff = calculateYawDiff(current_pose, wp->pose);
 
-  const bool use_strict_tolerance = (wp->command == "strict");
+  const auto parsed = parse_command(wp->command);
+  const bool use_strict_tolerance = (parsed.tolerance_mode == ToleranceMode::STRICT);
   const double pos_tol = use_strict_tolerance
       ? position_tolerance_strict_
       : position_tolerance_loose_;
@@ -57,8 +59,9 @@ bool WaypointManager::isWaypointReached(const geometry_msgs::msg::Pose& current_
       ? orientation_tolerance_strict_
       : orientation_tolerance_loose_;
 
-  bool position_reached = distance < pos_tol;
-  bool orientation_reached = std::abs(yaw_diff) < ori_tol;
+  const double kEpsilon = 1e-9;
+  bool position_reached = distance <= (pos_tol + kEpsilon);
+  bool orientation_reached = std::abs(yaw_diff) <= (ori_tol + kEpsilon);
 
   return position_reached && orientation_reached;
 }

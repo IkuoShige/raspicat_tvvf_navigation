@@ -6,6 +6,20 @@
 namespace raspicat_tvvf_navigation
 {
 
+enum class ToleranceMode
+{
+  STRICT,
+  LOOSE
+};
+
+struct ParsedCommand
+{
+  ToleranceMode tolerance_mode;
+  std::string action_command;
+};
+
+ParsedCommand parse_command(const std::string &command);
+
 // trueを返すコマンドのみ「アクション」として実行する。
 // 現状、strict/loose/空文字はアクション扱いしない。
 bool is_action_command(const std::string &command);

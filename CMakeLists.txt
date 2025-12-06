@@ -34,19 +34,41 @@ include_directories(include)
 add_library(csv_reader src/csv_reader.cpp)
 ament_target_dependencies(csv_reader rclcpp geometry_msgs)
 
+# Command utilities
+add_library(command_utils src/command_utils.cpp)
+
 # Waypoint Manager library
 add_library(waypoint_manager src/waypoint_manager.cpp)
-target_link_libraries(waypoint_manager csv_reader)
+target_link_libraries(waypoint_manager csv_reader command_utils)
 ament_target_dependencies(waypoint_manager rclcpp geometry_msgs tf2 tf2_ros tf2_geometry_msgs)
+
+# Waypoint Follower core library
+add_library(waypoint_follower_core
+  src/waypoint_follower_node.cpp
+  src/tolerance_config.cpp
+)
+target_link_libraries(waypoint_follower_core waypoint_manager csv_reader command_utils)
+ament_target_dependencies(waypoint_follower_core
+  rclcpp
+  geometry_msgs
+  nav_msgs
+  visualization_msgs
+  std_msgs
+  std_srvs
+  tf2
+  tf2_ros
+  tf2_geometry_msgs
+)
+rosidl_get_typesupport_target(cpp_typesupport_target ${PROJECT_NAME} "rosidl_typesupport_cpp")
+target_link_libraries(waypoint_follower_core "${cpp_typesupport_target}")
+target_include_directories(waypoint_follower_core PRIVATE
+  ${CMAKE_CURRENT_BINARY_DIR}/rosidl_generator_cpp)
 
 # Waypoint Follower Node
 add_executable(waypoint_follower_node
-  src/waypoint_follower_node.cpp
   src/waypoint_follower_main.cpp
-  src/command_utils.cpp
-  src/tolerance_config.cpp
 )
-target_link_libraries(waypoint_follower_node waypoint_manager csv_reader)
+target_link_libraries(waypoint_follower_node waypoint_follower_core)
 ament_target_dependencies(waypoint_follower_node
   rclcpp
   geometry_msgs
@@ -60,7 +82,6 @@ ament_target_dependencies(waypoint_follower_node
 )
 
 # Link against generated message library
-rosidl_get_typesupport_target(cpp_typesupport_target ${PROJECT_NAME} "rosidl_typesupport_cpp")
 target_link_libraries(waypoint_follower_node "${cpp_typesupport_target}")
 
 # Simple Map Server
@@ -77,6 +98,7 @@ ament_target_dependencies(simple_map_server
 # Install targets
 install(TARGETS
   waypoint_follower_node
+  waypoint_follower_core
   simple_map_server
   DESTINATION lib/${PROJECT_NAME}
 )
@@ -84,6 +106,7 @@ install(TARGETS
 # Install libraries
 install(TARGETS
   csv_reader
+  command_utils
   waypoint_manager
   EXPORT ${PROJECT_NAME}_targets
   ARCHIVE DESTINATION lib
@@ -143,8 +166,25 @@ if(BUILD_TESTING)
 
   ament_add_gtest(test_command_utils
     test/test_command_utils.cpp
-    src/command_utils.cpp
   )
+  target_link_libraries(test_command_utils command_utils)
+
+  ament_add_gtest(test_waypoint_follower_reach
+    test/test_waypoint_follower_reach.cpp
+  )
+  target_link_libraries(test_waypoint_follower_reach command_utils waypoint_manager csv_reader waypoint_follower_core)
+  ament_target_dependencies(test_waypoint_follower_reach
+    rclcpp
+    geometry_msgs
+    visualization_msgs
+    std_msgs
+    std_srvs
+    tf2
+    tf2_ros
+    tf2_geometry_msgs
+  )
+  target_include_directories(test_waypoint_follower_reach PRIVATE
+    ${CMAKE_CURRENT_BINARY_DIR}/rosidl_generator_cpp)
 endif()
 
 # Export targets
