@@ -133,6 +133,7 @@ private:
 
   // State variables
   bool paused_;
+  bool goal_sent_;  // true if goal_pose already sent for current waypoint
   rclcpp::Time goal_sent_time_;
   rclcpp::Time wait_start_time_;
   double wait_duration_;

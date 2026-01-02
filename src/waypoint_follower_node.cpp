@@ -11,6 +11,7 @@ WaypointFollowerNode::WaypointFollowerNode()
 : Node("waypoint_follower_node"),
   current_state_(NavigationState::IDLE),
   paused_(false),
+  goal_sent_(false),
   wait_duration_(0.0),
   wait_reason_(WaitReason::NONE),
   wait_topic_received_(false)
@@ -234,8 +235,8 @@ void WaypointFollowerNode::handleNavigatingState(const std::optional<geometry_ms
     return;
   }
 
-  // Check timeout
-  if ((this->now() - goal_sent_time_).seconds() > goal_timeout_) {
+  // Check timeout (only if goal has been sent)
+  if (goal_sent_ && (this->now() - goal_sent_time_).seconds() > goal_timeout_) {
     RCLCPP_WARN(this->get_logger(), "Goal timeout for waypoint %d", current_wp->id);
 
     waypoint_manager_->incrementRetryCount();
@@ -245,6 +246,7 @@ void WaypointFollowerNode::handleNavigatingState(const std::optional<geometry_ms
         RCLCPP_WARN(this->get_logger(), "Max retries reached, skipping waypoint %d",
                     current_wp->id);
         waypoint_manager_->skipCurrentWaypoint();
+        goal_sent_ = false;  // Reset for next waypoint
         transitionToState(NavigationState::NAVIGATING);
       } else {
         error_message_ = "Max retries reached for waypoint " +
@@ -254,21 +256,28 @@ void WaypointFollowerNode::handleNavigatingState(const std::optional<geometry_ms
       return;
     }
 
-    // Retry: send goal again
+    // Retry: allow re-sending goal
     RCLCPP_INFO(this->get_logger(), "Retrying waypoint %d (attempt %d/%d)",
                 current_wp->id,
                 waypoint_manager_->getCurrentRetryCount() + 1,
                 max_retry_count_);
+    goal_sent_ = false;  // Reset to allow re-sending
   }
 
-  // Send goal pose to tvvf_vo_c
-  auto goal_msg = geometry_msgs::msg::PoseStamped();
-  goal_msg.header.stamp = this->now();
-  goal_msg.header.frame_id = global_frame_;
-  goal_msg.pose = current_wp->pose;
+  // Send goal pose only once per waypoint (or on retry)
+  if (!goal_sent_) {
+    auto goal_msg = geometry_msgs::msg::PoseStamped();
+    goal_msg.header.stamp = this->now();
+    goal_msg.header.frame_id = global_frame_;
+    goal_msg.pose = current_wp->pose;
 
-  goal_pose_pub_->publish(goal_msg);
-  goal_sent_time_ = this->now();
+    goal_pose_pub_->publish(goal_msg);
+    goal_sent_time_ = this->now();
+    goal_sent_ = true;
+
+    RCLCPP_INFO(this->get_logger(), "Sent goal for waypoint %d (x=%.2f, y=%.2f)",
+                current_wp->id, current_wp->pose.position.x, current_wp->pose.position.y);
+  }
 }
 
 void WaypointFollowerNode::handleWaypointReachedState()
@@ -609,6 +618,12 @@ void WaypointFollowerNode::transitionToState(NavigationState new_state)
     RCLCPP_INFO(this->get_logger(), "State transition: %s -> %s",
                 stateToString(current_state_).c_str(),
                 stateToString(new_state).c_str());
+
+    // Reset goal_sent_ when entering NAVIGATING state (new waypoint)
+    if (new_state == NavigationState::NAVIGATING) {
+      goal_sent_ = false;
+    }
+
     current_state_ = new_state;
   }
 }

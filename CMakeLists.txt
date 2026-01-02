@@ -95,12 +95,19 @@ ament_target_dependencies(simple_map_server
   nav_msgs
 )
 
-# Install targets
+# Install executables
 install(TARGETS
   waypoint_follower_node
-  waypoint_follower_core
   simple_map_server
   DESTINATION lib/${PROJECT_NAME}
+)
+
+# Install core library to lib/ so it can be found at runtime
+install(TARGETS
+  waypoint_follower_core
+  ARCHIVE DESTINATION lib
+  LIBRARY DESTINATION lib
+  RUNTIME DESTINATION bin
 )
 
 # Install libraries
