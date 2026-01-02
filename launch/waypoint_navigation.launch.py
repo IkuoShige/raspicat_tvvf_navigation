@@ -25,23 +25,25 @@ def generate_launch_description():
 
     # Launch arguments
     use_sim_time = LaunchConfiguration('use_sim_time')
-    map_file = LaunchConfiguration('map_file')
-    rviz = LaunchConfiguration('rviz')
+    map_yaml = LaunchConfiguration('map_yaml')
     waypoint_csv = LaunchConfiguration('waypoint_csv')
+    regions_config = LaunchConfiguration('regions_config')
+    rviz = LaunchConfiguration('rviz')
+    rviz_config = LaunchConfiguration('rviz_config')
     auto_start = LaunchConfiguration('auto_start')
 
     # Configuration files
     map_scan_config = os.path.join(pkg_dir, 'config', 'map_scan_params.yaml')
-    map_regions_config = os.path.join(pkg_dir, 'config', 'map_regions.yaml')
     emcl2_config = os.path.join(pkg_dir, 'config', 'emcl2_params.yaml')
     obstacle_tracker_config = os.path.join(pkg_dir, 'config', 'obstacle_tracker_params.yaml')
     tvvf_vo_config = os.path.join(pkg_dir, 'config', 'tvvf_vo_params.yaml')
     waypoint_params = os.path.join(pkg_dir, 'config', 'waypoint_follower_params.yaml')
-    rviz_config = os.path.join(pkg_dir, 'rviz', 'navigation.rviz')
 
-    # Default files
-    default_map_file = os.path.join(pkg_dir, 'maps', 'maps.yaml')
-    default_waypoint_csv = os.path.join(pkg_dir, 'maps', 'maps.csv')
+    # Default resources resolved via package share
+    default_map_yaml = os.path.join(pkg_dir, 'maps', 'navigation_map_2_edge_stopline.yaml')
+    default_waypoint_csv = os.path.join(pkg_dir, 'maps', 'tsukuba_WP_1.csv')
+    default_regions_yaml = os.path.join(pkg_dir, 'config', 'map_regions.yaml')
+    default_rviz_config = os.path.join(pkg_dir, 'rviz', 'navigation.rviz')
 
     # Declare launch arguments
     declare_use_sim_time = DeclareLaunchArgument(
@@ -50,16 +52,28 @@ def generate_launch_description():
         description='Use simulation (Gazebo) clock if true'
     )
 
-    declare_map_file = DeclareLaunchArgument(
-        'map_file',
-        default_value=default_map_file,
-        description='Full path to map yaml file to load'
+    declare_map_yaml = DeclareLaunchArgument(
+        'map_yaml',
+        default_value=default_map_yaml,
+        description='Occupancy grid YAML file for simple_map_server'
+    )
+
+    declare_regions_config = DeclareLaunchArgument(
+        'regions_config',
+        default_value=default_regions_yaml,
+        description='Region configuration file path for map_scan_manager / pointcloud filters'
     )
 
     declare_rviz = DeclareLaunchArgument(
         'rviz',
         default_value='true',
         description='Launch RViz2 for visualization'
+    )
+
+    declare_rviz_config = DeclareLaunchArgument(
+        'rviz_config',
+        default_value=default_rviz_config,
+        description='RViz configuration file'
     )
 
     declare_waypoint_csv = DeclareLaunchArgument(
@@ -87,7 +101,7 @@ def generate_launch_description():
                 output='screen',
                 parameters=[
                     map_scan_config,
-                    {'map_regions_config_path': map_regions_config}
+                    {'map_regions_config_path': regions_config}
                 ]
             ),
 
@@ -98,7 +112,7 @@ def generate_launch_description():
                 name='map_server',
                 output='screen',
                 parameters=[{
-                    'map_yaml_path': map_file,
+                    'map_yaml_path': map_yaml,
                     'use_sim_time': use_sim_time
                 }]
             ),
@@ -165,8 +179,10 @@ def generate_launch_description():
     return LaunchDescription([
         # Declare arguments
         declare_use_sim_time,
-        declare_map_file,
+        declare_map_yaml,
+        declare_regions_config,
         declare_rviz,
+        declare_rviz_config,
         declare_waypoint_csv,
         declare_auto_start,
         # Launch navigation + waypoint nodes

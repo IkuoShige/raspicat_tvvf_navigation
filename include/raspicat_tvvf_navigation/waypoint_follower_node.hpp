@@ -13,6 +13,8 @@
 
 #include "raspicat_tvvf_navigation/waypoint_manager.hpp"
 #include "raspicat_tvvf_navigation/msg/waypoint_status.hpp"
+#include "raspicat_tvvf_navigation/tolerance_config.hpp"
+#include "raspicat_tvvf_navigation/command_utils.hpp"
 
 namespace raspicat_tvvf_navigation
 {
@@ -48,13 +50,10 @@ private:
   void transitionToState(NavigationState new_state);
   std::string stateToString(NavigationState state) const;
 
-  // Main control loop
-  void controlLoop();
-
   // State handlers
   void handleIdleState();
   void handleLoadingState();
-  void handleNavigatingState();
+  void handleNavigatingState(const std::optional<geometry_msgs::msg::Pose>& robot_pose);
   void handleWaypointReachedState();
   void handleWaitingState();
   void handleExecutingCommandState();
@@ -76,9 +75,6 @@ private:
   void publishWaypointMarkers();
   visualization_msgs::msg::Marker createWaypointMarker(
     const Waypoint& wp, int index, bool is_current, bool is_reached, bool is_skipped);
-
-  // TF utilities
-  std::optional<geometry_msgs::msg::Pose> getRobotPose();
 
   // Service callbacks
   void startNavigationCallback(
@@ -123,8 +119,10 @@ private:
 
   // Parameters
   std::string waypoint_csv_path_;
-  double position_tolerance_;
-  double orientation_tolerance_;
+  double position_tolerance_strict_;
+  double orientation_tolerance_strict_;
+  double position_tolerance_loose_;
+  double orientation_tolerance_loose_;
   int max_retry_count_;
   double goal_timeout_;
   bool auto_start_;
@@ -142,6 +140,19 @@ private:
   std::string wait_topic_name_;
   bool wait_topic_received_;
   std::string error_message_;
+
+protected:
+  // Testing helpers
+  bool loadWaypointsForTest(const std::string& path) { return waypoint_manager_->loadWaypoints(path); }
+  void setStateForTest(NavigationState state) { current_state_ = state; }
+  NavigationState getStateForTest() const { return current_state_; }
+  void markReachedForTest() { waypoint_manager_->markCurrentReached(); }
+
+  // Main control loop
+  void controlLoop();
+
+  // TF utilities (protected for tests)
+  virtual std::optional<geometry_msgs::msg::Pose> getRobotPose();
 };
 
 }  // namespace raspicat_tvvf_navigation

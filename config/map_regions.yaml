@@ -1,7 +1,8 @@
 /**:
   ros__parameters:
     # Default map setting for museum environment
-    default_map_yaml: "maps/museum.yaml"
+    default_map_yaml: "maps/maps.yaml"
+    # default_map_yaml: "/home/ryo/ros2_ws/src/raspicat_slam_navigation/raspicat_slam/config/maps/iscas_museum_map.yaml"
 
     # Map regions definition
     # For single map operation (museum), define one region covering the whole map
@@ -10,7 +11,7 @@
         x_max: 100.0   # Region X maximum
         y_min: -100.0  # Region Y minimum
         y_max: 100.0   # Region Y maximum
-        map_path: "maps/museum.yaml"  # Map file path
+        map_path: "maps/maps.yaml"  # Map file path
         localization_laser_height_min: 0.15  # Min laser height in this region (m)
         localization_laser_height_max: 2.0  # Max laser height in this region (m)
         priority: 1  # Region priority (higher value = higher priority)

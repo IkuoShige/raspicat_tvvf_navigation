@@ -93,7 +93,8 @@ Only minimal launch arguments are supported:
 **Waypoint and behavior parameters** are configured in `config/waypoint_follower_params.yaml`:
 - `waypoint_csv_path`: Path to waypoint CSV file
 - `auto_start`: Automatically start navigation on launch (true/false)
-- `position_tolerance`, `orientation_tolerance`: Waypoint reach thresholds
+- `position_tolerance_strict` / `orientation_tolerance_strict`: Default (strict) reach thresholds
+- `position_tolerance_loose` / `orientation_tolerance_loose`: Reach thresholds when `command=loose`
 - `loop_navigation`: Loop back to first waypoint after completing all
 - Other parameters (see Waypoint Follower Parameters section below)
 
@@ -167,6 +168,11 @@ The `command` field allows special behaviors at waypoints (e.g., stopping at cro
    0,1.0,2.0,0.0,0,0,0,1,
    ```
 
+1. **`loose`** - このウェイポイントだけ緩いトレランス（`*_loose`）で到達判定
+   ```csv
+   1,1.0,2.0,0.0,0,0,0,1,loose
+   ```
+
 2. **`wait:N`** - Wait for N seconds, then automatically proceed to next waypoint
    ```csv
    1,5.0,2.0,0.0,0,0,0,1,wait:5.0
@@ -218,10 +224,10 @@ id,pose_x,pose_y,pose_z,rot_x,rot_y,rot_z,rot_w,command,
   - Waypoint files should be created using [waypoint_editor](https://github.com/kzm784/waypoint_editor)
 
 ### Tolerance Settings
-- `position_tolerance` (double): How close robot must get to waypoint position (meters)
-  - Default: `0.3` meters
-- `orientation_tolerance` (double): How close robot orientation must match waypoint (radians)
-  - Default: `3.14` radians (allows any orientation)
+- `position_tolerance_strict` / `orientation_tolerance_strict`: デフォルトで使用する厳しめの到達判定
+  - Default: `0.3` m / `0.3` rad
+- `position_tolerance_loose` / `orientation_tolerance_loose`: `command=loose` のウェイポイントで使用する緩め判定
+  - Default: `0.5` m / `3.14` rad
 
 ### Retry and Timeout
 - `max_retry_count` (int): Maximum number of retry attempts per waypoint
@@ -257,8 +263,10 @@ waypoint_follower_node:
     waypoint_csv_path: "/home/your_username/your_workspace/waypoints/my_waypoints.csv"
 
     # Waypoint tolerance
-    position_tolerance: 0.3  # meters
-    orientation_tolerance: 3.14  # radians
+    position_tolerance_strict: 0.3  # meters
+    orientation_tolerance_strict: 0.3  # radians
+    position_tolerance_loose: 0.5  # meters
+    orientation_tolerance_loose: 3.14  # radians
 
     # Retry and timeout settings
     max_retry_count: 3
@@ -413,7 +421,6 @@ ros2 topic echo /waypoint_status
 - ROS 2 Humble
 - raspicat_description (robot URDF)
 - raspicat_gazebo (simulation only)
-- ros2_livox_simulation (simulation only)
 
 ### Navigation Stack
 - tvvf_vo_c

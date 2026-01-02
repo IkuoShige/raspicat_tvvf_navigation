@@ -17,8 +17,13 @@ WaypointFollowerNode::WaypointFollowerNode()
 {
   // Declare parameters
   this->declare_parameter("waypoint_csv_path", "");
-  this->declare_parameter("position_tolerance", 0.3);
-  this->declare_parameter("orientation_tolerance", 0.3);
+  this->declare_parameter("position_tolerance_strict", 0.3);
+  this->declare_parameter("orientation_tolerance_strict", 0.3);
+  this->declare_parameter("position_tolerance_loose", 0.5);
+  this->declare_parameter("orientation_tolerance_loose", 3.14);
+  // レガシー互換用（旧パラメータ名）
+  this->declare_parameter("position_tolerance", -1.0);
+  this->declare_parameter("orientation_tolerance", -1.0);
   this->declare_parameter("max_retry_count", 3);
   this->declare_parameter("goal_timeout", 30.0);
   this->declare_parameter("auto_start", false);
@@ -29,8 +34,24 @@ WaypointFollowerNode::WaypointFollowerNode()
 
   // Get parameters
   waypoint_csv_path_ = this->get_parameter("waypoint_csv_path").as_string();
-  position_tolerance_ = this->get_parameter("position_tolerance").as_double();
-  orientation_tolerance_ = this->get_parameter("orientation_tolerance").as_double();
+  position_tolerance_strict_ = this->get_parameter("position_tolerance_strict").as_double();
+  orientation_tolerance_strict_ = this->get_parameter("orientation_tolerance_strict").as_double();
+  position_tolerance_loose_ = this->get_parameter("position_tolerance_loose").as_double();
+  orientation_tolerance_loose_ = this->get_parameter("orientation_tolerance_loose").as_double();
+  const double legacy_position_tolerance = this->get_parameter("position_tolerance").as_double();
+  const double legacy_orientation_tolerance = this->get_parameter("orientation_tolerance").as_double();
+
+  {
+    ToleranceConfig raw{position_tolerance_strict_, orientation_tolerance_strict_,
+                        position_tolerance_loose_, orientation_tolerance_loose_};
+    ToleranceConfig defaults{0.3, 0.3, 0.5, 3.14};
+    auto resolved = resolve_tolerance_config(
+      raw, defaults, legacy_position_tolerance, legacy_orientation_tolerance);
+    position_tolerance_strict_ = resolved.position_strict;
+    orientation_tolerance_strict_ = resolved.orientation_strict;
+    position_tolerance_loose_ = resolved.position_loose;
+    orientation_tolerance_loose_ = resolved.orientation_loose;
+  }
   max_retry_count_ = this->get_parameter("max_retry_count").as_int();
   goal_timeout_ = this->get_parameter("goal_timeout").as_double();
   auto_start_ = this->get_parameter("auto_start").as_bool();
@@ -41,7 +62,10 @@ WaypointFollowerNode::WaypointFollowerNode()
 
   // Create waypoint manager
   waypoint_manager_ = std::make_unique<WaypointManager>(
-    position_tolerance_, orientation_tolerance_);
+    position_tolerance_strict_,
+    orientation_tolerance_strict_,
+    position_tolerance_loose_,
+    orientation_tolerance_loose_);
 
   // TF
   tf_buffer_ = std::make_shared<tf2_ros::Buffer>(this->get_clock());
@@ -112,6 +136,8 @@ void WaypointFollowerNode::controlLoop()
     return;
   }
 
+  const auto robot_pose = getRobotPose();
+
   switch (current_state_) {
     case NavigationState::IDLE:
       handleIdleState();
@@ -120,7 +146,7 @@ void WaypointFollowerNode::controlLoop()
       handleLoadingState();
       break;
     case NavigationState::NAVIGATING:
-      handleNavigatingState();
+      handleNavigatingState(robot_pose);
       break;
     case NavigationState::WAYPOINT_REACHED:
       handleWaypointReachedState();
@@ -150,7 +176,6 @@ void WaypointFollowerNode::controlLoop()
     status_msg.current_waypoint_id = current_wp->id;
     status_msg.current_command = current_wp->command;
 
-    auto robot_pose = getRobotPose();
     if (robot_pose.has_value()) {
       status_msg.distance_to_goal = waypoint_manager_->getDistanceToWaypoint(*robot_pose);
       status_msg.orientation_diff = waypoint_manager_->getOrientationDiff(*robot_pose);
@@ -186,7 +211,7 @@ void WaypointFollowerNode::handleLoadingState()
   }
 }
 
-void WaypointFollowerNode::handleNavigatingState()
+void WaypointFollowerNode::handleNavigatingState(const std::optional<geometry_msgs::msg::Pose>& robot_pose)
 {
   auto current_wp = waypoint_manager_->getCurrentWaypoint();
 
@@ -196,7 +221,6 @@ void WaypointFollowerNode::handleNavigatingState()
     return;
   }
 
-  auto robot_pose = getRobotPose();
   if (!robot_pose.has_value()) {
     RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
                          "Cannot get robot pose");
@@ -257,8 +281,10 @@ void WaypointFollowerNode::handleWaypointReachedState()
 
   RCLCPP_INFO(this->get_logger(), "Reached waypoint %d", current_wp->id);
 
-  // Execute command if present
-  if (!current_wp->command.empty()) {
+  const bool has_command = is_action_command(current_wp->command);
+
+  // Execute command if present (strict/loose/空は通常コマンド扱いせず即到達とみなす)
+  if (has_command) {
     // Do NOT mark as reached here - it will be marked when command completes
     executeWaypointCommand(current_wp->command);
   } else {
@@ -355,22 +381,25 @@ void WaypointFollowerNode::executeWaypointCommand(const std::string& command)
 {
   RCLCPP_INFO(this->get_logger(), "Executing command: %s", command.c_str());
 
-  if (command == "continue" || command.empty()) {
+  const auto parsed = parse_command(command);
+  const std::string& action = parsed.action_command;
+
+  if (action == "continue" || action.empty()) {
     if (waypoint_manager_->isCompleted()) {
       transitionToState(NavigationState::COMPLETED);
     } else {
       transitionToState(NavigationState::NAVIGATING);
     }
   }
-  else if (command == "pause" || command == "stop") {
+  else if (action == "pause" || action == "stop") {
     RCLCPP_INFO(this->get_logger(), "Pause command - waiting for manual resume");
     wait_reason_ = WaitReason::PAUSE;
     paused_ = true;
     transitionToState(NavigationState::WAITING);
   }
-  else if (command.substr(0, 5) == "wait:") {
+  else if (action.rfind("wait:", 0) == 0) {
     double wait_seconds;
-    if (parseWaitCommand(command, wait_seconds)) {
+    if (parseWaitCommand(action, wait_seconds)) {
       RCLCPP_INFO(this->get_logger(), "Waiting for %.1f seconds", wait_seconds);
       wait_reason_ = WaitReason::TIME;
       wait_start_time_ = this->now();
@@ -381,9 +410,9 @@ void WaypointFollowerNode::executeWaypointCommand(const std::string& command)
       transitionToState(NavigationState::NAVIGATING);
     }
   }
-  else if (command.substr(0, 11) == "wait_topic:") {
+  else if (action.rfind("wait_topic:", 0) == 0) {
     std::string topic_name;
-    if (parseWaitTopicCommand(command, topic_name)) {
+    if (parseWaitTopicCommand(action, topic_name)) {
       RCLCPP_INFO(this->get_logger(), "Waiting for topic: %s", topic_name.c_str());
       wait_reason_ = WaitReason::TOPIC;
       wait_topic_name_ = topic_name;
@@ -400,7 +429,7 @@ void WaypointFollowerNode::executeWaypointCommand(const std::string& command)
       transitionToState(NavigationState::NAVIGATING);
     }
   }
-  else if (command == "skip_if_fail") {
+  else if (action == "skip_if_fail") {
     // This is handled in the navigation timeout logic
     if (waypoint_manager_->isCompleted()) {
       transitionToState(NavigationState::COMPLETED);

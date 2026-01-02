@@ -2,14 +2,20 @@
 #include <cmath>
 #include <rclcpp/rclcpp.hpp>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
+#include "raspicat_tvvf_navigation/command_utils.hpp"
 
 namespace raspicat_tvvf_navigation
 {
 
-WaypointManager::WaypointManager(double position_tolerance, double orientation_tolerance)
+WaypointManager::WaypointManager(double position_tolerance_strict,
+                                 double orientation_tolerance_strict,
+                                 double position_tolerance_loose,
+                                 double orientation_tolerance_loose)
 : current_index_(0),
-  position_tolerance_(position_tolerance),
-  orientation_tolerance_(orientation_tolerance)
+  position_tolerance_strict_(position_tolerance_strict),
+  orientation_tolerance_strict_(orientation_tolerance_strict),
+  position_tolerance_loose_(position_tolerance_loose),
+  orientation_tolerance_loose_(orientation_tolerance_loose)
 {
 }
 
@@ -44,8 +50,18 @@ bool WaypointManager::isWaypointReached(const geometry_msgs::msg::Pose& current_
   double distance = calculateDistance(current_pose, wp->pose);
   double yaw_diff = calculateYawDiff(current_pose, wp->pose);
 
-  bool position_reached = distance < position_tolerance_;
-  bool orientation_reached = std::abs(yaw_diff) < orientation_tolerance_;
+  const auto parsed = parse_command(wp->command);
+  const bool use_strict_tolerance = (parsed.tolerance_mode == ToleranceMode::STRICT);
+  const double pos_tol = use_strict_tolerance
+      ? position_tolerance_strict_
+      : position_tolerance_loose_;
+  const double ori_tol = use_strict_tolerance
+      ? orientation_tolerance_strict_
+      : orientation_tolerance_loose_;
+
+  const double kEpsilon = 1e-9;
+  bool position_reached = distance <= (pos_tol + kEpsilon);
+  bool orientation_reached = std::abs(yaw_diff) <= (ori_tol + kEpsilon);
 
   return position_reached && orientation_reached;
 }
