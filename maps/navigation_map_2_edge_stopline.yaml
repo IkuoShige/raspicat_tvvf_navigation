@@ -1,6 +1,0 @@
-image: navigation_map_2_edge_stopline.pgm
-resolution: 0.2
-origin: [-427.9557800292969, -150.34402465820312, 0.0]
-occupied_thresh: 0.65
-free_thresh: 0.2
-negate: 0
