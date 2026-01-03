@@ -75,6 +75,8 @@ WaypointFollowerNode::WaypointFollowerNode()
   // Publishers
   goal_pose_pub_ = this->create_publisher<geometry_msgs::msg::PoseStamped>(
     "goal_pose", 10);
+  next_goal_pose_pub_ = this->create_publisher<geometry_msgs::msg::PoseStamped>(
+    "next_goal_pose", 10);
   waypoint_markers_pub_ = this->create_publisher<visualization_msgs::msg::MarkerArray>(
     "waypoint_markers", 10);
   status_pub_ = this->create_publisher<msg::WaypointStatus>(
@@ -277,6 +279,17 @@ void WaypointFollowerNode::handleNavigatingState(const std::optional<geometry_ms
 
     RCLCPP_INFO(this->get_logger(), "Sent goal for waypoint %d (x=%.2f, y=%.2f)",
                 current_wp->id, current_wp->pose.position.x, current_wp->pose.position.y);
+
+    auto next_wp = waypoint_manager_->getNextWaypoint();
+    if (next_wp.has_value()) {
+      auto next_goal_msg = geometry_msgs::msg::PoseStamped();
+      next_goal_msg.header.stamp = this->now();
+      next_goal_msg.header.frame_id = global_frame_;
+      next_goal_msg.pose = next_wp->pose;
+      next_goal_pose_pub_->publish(next_goal_msg);
+      RCLCPP_INFO(this->get_logger(), "Published next goal for waypoint %d (x=%.2f, y=%.2f)",
+                  next_wp->id, next_wp->pose.position.x, next_wp->pose.position.y);
+    }
   }
 }
 

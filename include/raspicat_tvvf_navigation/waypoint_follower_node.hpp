@@ -95,6 +95,7 @@ private:
 
   // Publishers
   rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr goal_pose_pub_;
+  rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr next_goal_pose_pub_;
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr waypoint_markers_pub_;
   rclcpp::Publisher<msg::WaypointStatus>::SharedPtr status_pub_;
 

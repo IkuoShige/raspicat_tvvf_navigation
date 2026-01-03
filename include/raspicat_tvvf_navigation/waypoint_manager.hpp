@@ -28,6 +28,11 @@ public:
   std::optional<Waypoint> getCurrentWaypoint() const;
 
   /**
+   * @brief Get next waypoint (current_index + 1)
+   */
+  std::optional<Waypoint> getNextWaypoint() const;
+
+  /**
    * @brief Check if current waypoint is reached
    */
   bool isWaypointReached(const geometry_msgs::msg::Pose& current_pose) const;

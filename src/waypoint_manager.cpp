@@ -40,6 +40,15 @@ std::optional<Waypoint> WaypointManager::getCurrentWaypoint() const
   return waypoints_[current_index_];
 }
 
+std::optional<Waypoint> WaypointManager::getNextWaypoint() const
+{
+  size_t next_index = current_index_ + 1;
+  if (next_index >= waypoints_.size()) {
+    return std::nullopt;
+  }
+  return waypoints_[next_index];
+}
+
 bool WaypointManager::isWaypointReached(const geometry_msgs::msg::Pose& current_pose) const
 {
   auto wp = getCurrentWaypoint();
